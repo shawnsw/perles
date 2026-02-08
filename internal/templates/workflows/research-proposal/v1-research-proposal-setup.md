@@ -26,6 +26,12 @@ Create the proposal directory and shared proposal document with problem statemen
 
 5. Define specific research questions for each worker role
 
+6. **Attach the proposal to the task channel** so it is visible in the session viewer:
+   ```
+   fabric_attach(target_id="<task_channel_id>", path="<absolute_path_to_research-proposal.md>", name="research-proposal.md")
+   ```
+   Use the channel ID from `fabric_send` or the task assignment response as the `target_id`.
+
 ## Directory Structure
 
 ```
@@ -72,3 +78,4 @@ Create the proposal with this structure:
 - [ ] Problem statement clearly articulates the need
 - [ ] Research questions are specific and actionable for each role
 - [ ] Document structure follows the template
+- [ ] Proposal file attached to task channel via `fabric_attach`

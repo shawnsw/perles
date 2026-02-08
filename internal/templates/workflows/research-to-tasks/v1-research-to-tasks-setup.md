@@ -26,6 +26,12 @@ Read the research document and create a structured plan document that will captu
 
 4. **Extract key implementation points** from the research
 
+5. **Attach the plan to the task channel** so it is visible in the session viewer:
+   ```
+   fabric_attach(target_id="<task_channel_id>", path="<absolute_path_to_plan.md>", name="plan.md")
+   ```
+   Use the channel ID from `fabric_send` or the task assignment response as the `target_id`.
+
 ## Plan Document Structure
 
 Create the document with this exact structure:
@@ -126,3 +132,4 @@ Every task in this plan includes its tests. We do NOT defer testing.
 - [ ] Research summary accurately reflects the research document
 - [ ] Key implementation points are extracted
 - [ ] All placeholder sections are present for subsequent phases
+- [ ] Plan file attached to task channel via `fabric_attach`

@@ -885,18 +885,32 @@ func TestHandler_ReadFile_MissingPath(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "path parameter required")
 }
 
-func TestHandler_ReadFile_AccessDenied_OutsideSessionDir(t *testing.T) {
+func TestHandler_ReadFile_OutsideSessionDir_Allowed(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create a file outside the sessions directory
-	outsideFile := filepath.Join(os.TempDir(), "secret-file.txt")
-	require.NoError(t, os.WriteFile(outsideFile, []byte("secret data"), 0600))
-	defer os.Remove(outsideFile)
+	// Create a file outside the sessions directory - should still be readable
+	// since fabric_attach can reference files anywhere on the filesystem
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "project-file.txt")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("project data"), 0600))
 
 	h := NewHandler(tmpDir, createTestFS(), nil)
 	mux := createTestMux(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+outsideFile, nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "project data", w.Body.String())
+}
+
+func TestHandler_ReadFile_RelativePath_Denied(t *testing.T) {
+	h := NewHandler(t.TempDir(), createTestFS(), nil)
+	mux := createTestMux(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path=relative/path.txt", nil)
 	w := httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
@@ -921,23 +935,27 @@ func TestHandler_ReadFile_FileNotFound(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "file not found")
 }
 
-func TestHandler_ReadFile_PathTraversalBlocked(t *testing.T) {
+func TestHandler_ReadFile_PathTraversalCleaned(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Attempt path traversal attack
+	// Create a file and access it via a path with .. segments
+	// filepath.Clean resolves these to the canonical path
+	testFile := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("content"), 0600))
+
 	h := NewHandler(tmpDir, createTestFS(), nil)
 	mux := createTestMux(h)
 
-	// Try to escape the sessions directory with ..
-	maliciousPath := filepath.Join(tmpDir, "..", "etc", "passwd")
-	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+maliciousPath, nil)
+	// Access via path with .. that resolves to the same file
+	traversalPath := filepath.Join(tmpDir, "subdir", "..", "file.txt")
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+traversalPath, nil)
 	w := httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
 
-	// Should be forbidden because after resolution, path is outside tmpDir
-	require.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "access denied")
+	// filepath.Clean resolves the .. so the file is found
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "content", w.Body.String())
 }
 
 // Suppress unused import warning for context

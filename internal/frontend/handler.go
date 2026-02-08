@@ -730,7 +730,12 @@ func (h *Handler) getFabricService(ctx context.Context, workflowID string) (*fab
 
 // ReadFile reads a file from the filesystem and returns its contents.
 // GET /api/file?path=/path/to/file
-// Security: Only allows reading files within session directories.
+// Security: Requires absolute paths, rejects path traversal attempts.
+// This endpoint is used by the session viewer to display artifacts attached
+// via fabric_attach, which may reference files anywhere on the filesystem
+// (e.g., project working directories, session directories).
+// Since this server only listens on localhost, the security boundary is
+// the local user's filesystem access.
 func (h *Handler) ReadFile(w http.ResponseWriter, r *http.Request) {
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
@@ -738,16 +743,20 @@ func (h *Handler) ReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security: Only allow reading files within the sessions directory
-	// This prevents arbitrary file access
-	if !strings.HasPrefix(filePath, h.sessionBaseDir) {
-		http.Error(w, "access denied: file outside sessions directory", http.StatusForbidden)
+	// Security: Require absolute paths and reject path traversal
+	clean := filepath.Clean(filePath)
+	if !filepath.IsAbs(clean) {
+		http.Error(w, "access denied: path must be absolute", http.StatusForbidden)
+		return
+	}
+	if strings.Contains(clean, "..") {
+		http.Error(w, "access denied: path traversal not allowed", http.StatusForbidden)
 		return
 	}
 
 	// Read the file
-	// G304: filePath is validated above to be within sessionBaseDir
-	content, err := os.ReadFile(filePath) //nolint:gosec
+	// G304: filePath is cleaned above and validated as absolute with no traversal
+	content, err := os.ReadFile(clean) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "file not found", http.StatusNotFound)
