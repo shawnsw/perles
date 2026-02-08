@@ -81,7 +81,9 @@ func (r *MemoryAckRepository) IsAcked(threadID, agentID string) (bool, error) {
 }
 
 // GetUnacked returns all unacked messages for an agent, grouped by channel.
-// This includes both top-level messages and replies that mention the agent.
+// This includes top-level messages, replies that mention the agent, replies in
+// threads the agent participates in, and replies in channels where the agent
+// has a ModeAll subscription.
 func (r *MemoryAckRepository) GetUnacked(agentID string) (map[string]UnackedSummary, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -128,15 +130,18 @@ func (r *MemoryAckRepository) GetUnacked(agentID string) (map[string]UnackedSumm
 				continue
 			}
 		} else {
-			// Reply: show if mentioned, participant in root thread,
-			// or if @here was used and agent is a fabric participant
-			shouldShow := msg.HasMention(agentID) || r.isParticipantInThread(agentID, msg.ID) || r.isHereMentionTarget(msg, agentID)
-			if !shouldShow {
-				continue
-			}
-			// Find the channel through the parent chain
+			// Reply: find the channel first (needed for subscription check)
 			channelID = r.getChannelForReply(msg.ID)
 			if channelID == "" {
+				continue
+			}
+			// Show if mentioned, participant in root thread,
+			// @here target, or subscribed to the channel with ModeAll
+			shouldShow := msg.HasMention(agentID) ||
+				r.isParticipantInThread(agentID, msg.ID) ||
+				r.isHereMentionTarget(msg, agentID) ||
+				r.isSubscribedAll(agentID, channelID)
+			if !shouldShow {
 				continue
 			}
 		}
@@ -241,6 +246,20 @@ func (r *MemoryAckRepository) isSubscribed(agentID, channelID string) bool {
 		return false
 	}
 	return true
+}
+
+// isSubscribedAll checks if an agent is subscribed to a channel with ModeAll.
+// ModeAll subscribers see all messages in the channel, including thread replies.
+// ModeMentions subscribers only see messages that mention them (handled separately).
+func (r *MemoryAckRepository) isSubscribedAll(agentID, channelID string) bool {
+	if r.subRepo == nil {
+		return false
+	}
+	sub, err := r.subRepo.Get(channelID, agentID)
+	if err != nil || sub == nil {
+		return false
+	}
+	return sub.Mode == domain.ModeAll
 }
 
 // isHereMentionTarget checks if the message has @here and the agent is a fabric participant.

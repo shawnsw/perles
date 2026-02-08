@@ -153,18 +153,21 @@ func TestMemoryAckRepository_GetUnacked_RepliesWithMentions(t *testing.T) {
 	require.Equal(t, 1, unacked[channel.ID].Count)
 	require.Contains(t, unacked[channel.ID].ThreadIDs, reply.ID)
 
-	// Worker-1 (who wrote the reply) should only see the original message
-	// since replies don't show unless they mention you
+	// Worker-1 (who wrote the reply) should see the original message and NOT their own reply.
+	// They are subscribed with ModeAll so they see all thread replies in the channel,
+	// but the self-filter (CreatedBy == agentID) excludes their own reply.
 	unacked, err = ackRepo.GetUnacked("worker-1")
 	require.NoError(t, err)
 	require.Equal(t, 1, unacked[channel.ID].Count)
 	require.Contains(t, unacked[channel.ID].ThreadIDs, msg.ID)
 
-	// Worker-2 (not mentioned) should only see the original message
+	// Worker-2 (not mentioned) should see both the original message AND the reply
+	// because they are subscribed with ModeAll
 	unacked, err = ackRepo.GetUnacked("worker-2")
 	require.NoError(t, err)
-	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Equal(t, 2, unacked[channel.ID].Count)
 	require.Contains(t, unacked[channel.ID].ThreadIDs, msg.ID)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply.ID)
 }
 
 func TestMemoryAckRepository_GetUnacked_NestedReplies(t *testing.T) {
@@ -212,10 +215,13 @@ func TestMemoryAckRepository_GetUnacked_NestedReplies(t *testing.T) {
 	err = depRepo.Add(domain.NewDependency(reply2.ID, reply1.ID, domain.RelationReplyTo))
 	require.NoError(t, err)
 
-	// Coordinator should only see nested reply with mention (not their own message)
+	// Coordinator should see both replies (not their own top-level message).
+	// reply1: visible via ModeAll subscription to the channel
+	// reply2: visible via direct @mention AND ModeAll subscription
 	unacked, err := ackRepo.GetUnacked("coordinator")
 	require.NoError(t, err)
-	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Equal(t, 2, unacked[channel.ID].Count)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply1.ID)
 	require.Contains(t, unacked[channel.ID].ThreadIDs, reply2.ID)
 }
 
@@ -387,4 +393,143 @@ func TestMemoryAckRepository_GetUnacked_ParticipantSeesReplies(t *testing.T) {
 	unacked, err = ackRepo.GetUnacked("worker-4")
 	require.NoError(t, err)
 	require.Empty(t, unacked, "worker-4 is not mentioned/participant/subscribed - sees nothing")
+}
+
+func TestMemoryAckRepository_GetUnacked_ModeAllSubscriberSeesReplies(t *testing.T) {
+	ackRepo, threadRepo, depRepo, subRepo := setupAckTestRepos()
+
+	// Create a channel
+	channel, err := threadRepo.Create(domain.Thread{
+		Type: domain.ThreadChannel,
+		Slug: "tasks",
+	})
+	require.NoError(t, err)
+
+	// Observer subscribes with ModeAll — should see everything including thread replies
+	_, err = subRepo.Subscribe(channel.ID, "observer", domain.ModeAll)
+	require.NoError(t, err)
+
+	// Coordinator posts a top-level message mentioning worker-1 only
+	root, err := threadRepo.Create(domain.Thread{
+		Type:         domain.ThreadMessage,
+		Content:      "Hey @worker-1 implement the auth module",
+		CreatedBy:    "coordinator",
+		Mentions:     []string{"worker-1"},
+		Participants: []string{"coordinator", "worker-1"},
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(root.ID, channel.ID, domain.RelationChildOf))
+	require.NoError(t, err)
+
+	// Observer should see the top-level message (subscribed to channel)
+	unacked, err := ackRepo.GetUnacked("observer")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, root.ID)
+
+	// Observer ACKs the root message
+	err = ackRepo.Ack("observer", root.ID)
+	require.NoError(t, err)
+
+	// Worker-1 replies (observer is NOT mentioned, NOT a participant on the thread)
+	reply1, err := threadRepo.Create(domain.Thread{
+		Type:      domain.ThreadMessage,
+		Content:   "Auth module done, @coordinator please review",
+		CreatedBy: "worker-1",
+		Mentions:  []string{"coordinator"},
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(reply1.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	// Coordinator replies back
+	reply2, err := threadRepo.Create(domain.Thread{
+		Type:      domain.ThreadMessage,
+		Content:   "Looks good, merging",
+		CreatedBy: "coordinator",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(reply2.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	// Observer should see both replies via ModeAll subscription,
+	// even though they are not mentioned or a participant in the thread
+	unacked, err = ackRepo.GetUnacked("observer")
+	require.NoError(t, err)
+	require.Equal(t, 2, unacked[channel.ID].Count, "observer with ModeAll should see all replies")
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply1.ID)
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply2.ID)
+
+	// Root should NOT reappear (already ACK'd)
+	require.NotContains(t, unacked[channel.ID].ThreadIDs, root.ID)
+}
+
+func TestMemoryAckRepository_GetUnacked_ModeMentionsSubscriberSkipsReplies(t *testing.T) {
+	ackRepo, threadRepo, depRepo, subRepo := setupAckTestRepos()
+
+	// Create a channel
+	channel, err := threadRepo.Create(domain.Thread{
+		Type: domain.ThreadChannel,
+		Slug: "tasks",
+	})
+	require.NoError(t, err)
+
+	// Agent subscribes with ModeMentions — should only see top-level messages
+	// and replies that explicitly mention them
+	_, err = subRepo.Subscribe(channel.ID, "watcher", domain.ModeMentions)
+	require.NoError(t, err)
+
+	// Coordinator posts a top-level message (watcher is NOT mentioned)
+	root, err := threadRepo.Create(domain.Thread{
+		Type:         domain.ThreadMessage,
+		Content:      "Hey @worker-1 implement the auth module",
+		CreatedBy:    "coordinator",
+		Mentions:     []string{"worker-1"},
+		Participants: []string{"coordinator", "worker-1"},
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(root.ID, channel.ID, domain.RelationChildOf))
+	require.NoError(t, err)
+
+	// Watcher with ModeMentions should still see top-level messages
+	// (isSubscribed is used for top-level, which doesn't filter by mode)
+	unacked, err := ackRepo.GetUnacked("watcher")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count, "ModeMentions subscriber sees top-level messages")
+
+	// ACK the root
+	err = ackRepo.Ack("watcher", root.ID)
+	require.NoError(t, err)
+
+	// Worker replies without mentioning watcher
+	reply1, err := threadRepo.Create(domain.Thread{
+		Type:      domain.ThreadMessage,
+		Content:   "Done with auth",
+		CreatedBy: "worker-1",
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(reply1.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	// Watcher should NOT see the reply (ModeMentions, not mentioned, not participant)
+	unacked, err = ackRepo.GetUnacked("watcher")
+	require.NoError(t, err)
+	require.Empty(t, unacked, "ModeMentions subscriber should not see replies without mention")
+
+	// Now a reply that mentions watcher
+	reply2, err := threadRepo.Create(domain.Thread{
+		Type:      domain.ThreadMessage,
+		Content:   "Hey @watcher can you review?",
+		CreatedBy: "worker-1",
+		Mentions:  []string{"watcher"},
+	})
+	require.NoError(t, err)
+	err = depRepo.Add(domain.NewDependency(reply2.ID, root.ID, domain.RelationReplyTo))
+	require.NoError(t, err)
+
+	// Watcher SHOULD see this reply (they are mentioned)
+	unacked, err = ackRepo.GetUnacked("watcher")
+	require.NoError(t, err)
+	require.Equal(t, 1, unacked[channel.ID].Count, "ModeMentions subscriber should see reply that mentions them")
+	require.Contains(t, unacked[channel.ID].ThreadIDs, reply2.ID)
 }
