@@ -255,7 +255,7 @@ func (m Model) handleEpicTreeKeysFocusTree(msg tea.KeyMsg) (mode.Controller, tea
 			if node := m.epicTree.SelectedNode(); node != nil {
 				issue := node.Issue
 				m.editingIssue = &issue // Store for comparison on save
-				editor := issueeditor.New(issue).SetSize(m.width, m.height)
+				editor := issueeditor.NewWithVimMode(issue, m.vimMode).SetSize(m.width, m.height)
 				m.issueEditor = &editor
 				return m, m.issueEditor.Init()
 			}
@@ -298,7 +298,7 @@ func (m Model) handleEpicTreeKeysFocusDetails(msg tea.KeyMsg) (mode.Controller, 
 			if node := m.epicTree.SelectedNode(); node != nil {
 				issue := node.Issue
 				m.editingIssue = &issue // Store for comparison on save
-				editor := issueeditor.New(issue).SetSize(m.width, m.height)
+				editor := issueeditor.NewWithVimMode(issue, m.vimMode).SetSize(m.width, m.height)
 				m.issueEditor = &editor
 				return m, m.issueEditor.Init()
 			}

@@ -3,6 +3,7 @@ package issueeditor
 import (
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	zone "github.com/lrstanley/bubblezone"
@@ -654,7 +655,7 @@ func TestNew_InitializesTitleField(t *testing.T) {
 	issue := testIssueWithDescription("test-123", "My Custom Title", "", []string{}, beads.PriorityMedium, beads.StatusOpen)
 	m := New(issue)
 
-	view := m.View()
+	view := stripZoneMarkers(m.View())
 	require.Contains(t, view, "Title", "expected Title field label")
 	require.Contains(t, view, "My Custom Title", "expected title value in view")
 }
@@ -831,7 +832,7 @@ func TestIssueeditor_SaveMsg_IncludesNotes(t *testing.T) {
 func TestIssueeditor_NotesField_VimEnabled(t *testing.T) {
 	// VimEnabled starts in insert mode by default, so we can type directly
 	issue := testIssueWithNotes("test-123", "Title", "Desc", "", []string{}, beads.PriorityMedium, beads.StatusOpen)
-	m := New(issue)
+	m := NewWithVimMode(issue, true)
 
 	// Tab to Notes field (Title -> Priority -> Status -> Labels -> Add Label input -> Description -> Notes)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // Priority
@@ -860,6 +861,43 @@ func TestIssueeditor_NotesField_VimEnabled(t *testing.T) {
 	saveMsg, ok := msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg, got %T", msg)
 	require.Equal(t, "vim mode works", saveMsg.Notes, "vim mode should allow typing in notes field")
+}
+
+func TestIssueEditor_TitleField_VimModeDisabled_EscapeCancels(t *testing.T) {
+	issue := testIssue("test-title-esc-off", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	m := NewWithVimMode(issue, false).SetSize(120, 40)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	require.NotNil(t, cmd, "expected cancel command when vim mode is disabled")
+	msg := cmd()
+	_, ok := msg.(CancelMsg)
+	require.True(t, ok, "expected CancelMsg when vim mode is disabled, got %T", msg)
+}
+
+func TestIssueEditor_TitleField_VimModeEnabled_EscapeStaysInModal(t *testing.T) {
+	issue := testIssue("test-title-esc-on", []string{}, beads.PriorityCritical, beads.StatusOpen)
+	m := NewWithVimMode(issue, true).SetSize(120, 40)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		msg := cmd()
+		_, isCancel := msg.(CancelMsg)
+		require.False(t, isCancel, "Escape should switch title vimtextarea mode, not cancel modal")
+	}
+
+	// Verify modal remains active by changing priority and saving.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})                       // Priority
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // P1
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})                     // select P1
+	for range 6 {                                                       // Status -> Labels -> Add Label -> Description -> Notes -> Submit
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, cmd, "expected save command after Esc in vim mode")
+	msg := cmd()
+	saveMsg, ok := msg.(SaveMsg)
+	require.True(t, ok, "expected SaveMsg after Esc in vim mode, got %T", msg)
+	require.Equal(t, beads.PriorityHigh, saveMsg.Priority, "priority change proves modal stayed active after Esc")
 }
 
 func TestIssueeditor_EmptyNotes_DisplaysPlaceholder(t *testing.T) {
@@ -905,7 +943,9 @@ func TestIssueEditor_View_ManyLabels_Golden(t *testing.T) {
 // Zone IDs are global and vary based on test execution order, causing flakiness.
 func stripZoneMarkers(s string) string {
 	zonePattern := regexp.MustCompile(`\x1b\[\d+z`)
-	return zonePattern.ReplaceAllString(s, "")
+	ansiPattern := regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+	cleaned := zonePattern.ReplaceAllString(s, "")
+	return ansiPattern.ReplaceAllString(cleaned, "")
 }
 
 // Golden tests for two-column layout
@@ -918,6 +958,80 @@ func TestIssueEditor_TwoColumn_120x40_Golden(t *testing.T) {
 	view := stripZoneMarkers(m.View())
 
 	teatest.RequireEqualOutput(t, []byte(view))
+}
+
+func TestIssueEditor_LongTitle_120x40_Golden(t *testing.T) {
+	const titleOverflowSentinel = "OVERLAP_SENTINEL"
+	const descriptionSentinel = "DESC_SENTINEL"
+
+	issue := testIssueWithNotes(
+		"test-long-title",
+		titleOverflowSentinel+" This is a deliberately long pre-filled issue title to validate two-column containment behavior in the editor modal",
+		descriptionSentinel,
+		"Internal notes for long title case",
+		[]string{"bug", "ui"},
+		beads.PriorityHigh,
+		beads.StatusOpen,
+	)
+	m := New(issue)
+	m = m.SetSize(120, 40)
+	view := stripZoneMarkers(m.View())
+
+	teatest.RequireEqualOutput(t, []byte(view))
+
+	var descriptionRow string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, descriptionSentinel) {
+			descriptionRow = line
+			break
+		}
+	}
+	require.NotEmpty(t, descriptionRow, "expected to find description row containing sentinel text")
+
+	parts := strings.SplitN(descriptionRow, "│   │", 2)
+	require.Len(t, parts, 2, "expected two-column row delimiter between Title and Description sections")
+	require.NotContains(t, parts[1], titleOverflowSentinel, "title overflow should never appear in Description column")
+}
+
+func TestIssueEditor_TitleField_NextFlowViaEnterAndDownArrow(t *testing.T) {
+	issue := testIssue("test-title-nav", []string{"bug"}, beads.PriorityCritical, beads.StatusOpen)
+	m := New(issue).SetSize(120, 40)
+
+	// Enter from title should move to Priority (same flow as legacy text input).
+	var cmd tea.Cmd
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, cmd, "expected Enter on title textarea to emit navigation command")
+	m, _ = m.Update(cmd())
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // P1
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // P2
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})                     // select P2
+
+	// Continue to submit and save.
+	for range 6 { // Status -> Labels -> Add Label -> Description -> Notes -> Submit
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, cmd, "expected save command after Enter navigation from title")
+	msg := cmd()
+	saveMsg, ok := msg.(SaveMsg)
+	require.True(t, ok, "expected SaveMsg, got %T", msg)
+	require.Equal(t, beads.PriorityMedium, saveMsg.Priority, "priority change proves Enter advanced focus off title field")
+
+	// Down-arrow from title should also move to Priority.
+	m = New(issue).SetSize(120, 40)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // P1
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // P2
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})                     // select P2
+	for range 6 {                                                       // Status -> Labels -> Add Label -> Description -> Notes -> Submit
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	}
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	require.NotNil(t, cmd, "expected save command after Down navigation from title")
+	msg = cmd()
+	saveMsg, ok = msg.(SaveMsg)
+	require.True(t, ok, "expected SaveMsg, got %T", msg)
+	require.Equal(t, beads.PriorityMedium, saveMsg.Priority, "priority change proves Down-arrow advanced focus off title field")
 }
 
 func TestIssueEditor_SingleColumn_80x40_Golden(t *testing.T) {

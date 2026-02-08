@@ -80,10 +80,10 @@ func newFieldState(cfg FieldConfig) fieldState {
 		if cfg.MaxLength > 0 {
 			ti.CharLimit = cfg.MaxLength
 		}
+		ti.Width = 36 // Default width, fits in 50-wide modal
 		if cfg.InitialValue != "" {
 			ti.SetValue(cfg.InitialValue)
 		}
-		ti.Width = 36 // Default width, fits in 50-wide modal
 		fs.textInput = ti
 
 	case FieldTypeColor:

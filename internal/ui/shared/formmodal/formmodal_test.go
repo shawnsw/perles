@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/require"
 
@@ -4181,6 +4182,249 @@ func TestGolden_SetError(t *testing.T) {
 	m = m.SetError("create workflow: template \"v1-security-assessment.md\" not found")
 
 	compareGolden(t, "set_error", m.View())
+}
+
+func TestTextField_NewFieldState_LongInitialValueRespectsWidthOnFirstRender(t *testing.T) {
+	initialValue := strings.Repeat("a", 200)
+	fs := newFieldState(FieldConfig{
+		Key:          "title",
+		Type:         FieldTypeText,
+		Label:        "Title",
+		InitialValue: initialValue,
+	})
+
+	require.Equal(t, 36, fs.textInput.Width)
+	require.Equal(t, initialValue, fs.textInput.Value())
+	require.Equal(t, len(initialValue), fs.textInput.Position())
+	require.LessOrEqual(t, lipgloss.Width(fs.textInput.View()), fs.textInput.Width+1)
+}
+
+func TestTextField_NewFieldState_PreservesStandardInitializationBehavior(t *testing.T) {
+	fs := newFieldState(FieldConfig{
+		Key:          "name",
+		Type:         FieldTypeText,
+		Label:        "Name",
+		Placeholder:  "Enter name",
+		MaxLength:    64,
+		InitialValue: "Alice",
+	})
+
+	require.Equal(t, "Enter name", fs.textInput.Placeholder)
+	require.Equal(t, "", fs.textInput.Prompt)
+	require.Equal(t, 64, fs.textInput.CharLimit)
+	require.Equal(t, 36, fs.textInput.Width)
+	require.Equal(t, "Alice", fs.textInput.Value())
+	require.Equal(t, len("Alice"), fs.textInput.Position())
+}
+
+func TestTextField_RenderField_WidthTransitionRecomputesOverflowWindow(t *testing.T) {
+	initialValue := strings.Repeat("long-title-", 25)
+	m := New(FormConfig{
+		Title: "Test Form",
+		Fields: []FieldConfig{
+			{
+				Key:          "title",
+				Type:         FieldTypeText,
+				Label:        "Title",
+				InitialValue: initialValue,
+			},
+		},
+	})
+
+	_ = m.renderField(0, 70) // textinput width: 67
+	require.Equal(t, 67, m.fields[0].textInput.Width)
+	require.LessOrEqual(t, lipgloss.Width(m.fields[0].textInput.View()), m.fields[0].textInput.Width+1)
+
+	_ = m.renderField(0, 24) // textinput width: 21
+	require.Equal(t, 21, m.fields[0].textInput.Width)
+	require.Equal(t, initialValue, m.fields[0].textInput.Value())
+	require.Equal(t, len(initialValue), m.fields[0].textInput.Position())
+	require.LessOrEqual(t, lipgloss.Width(m.fields[0].textInput.View()), m.fields[0].textInput.Width+1)
+}
+
+func TestTextField_View_LongValueContainedAcrossLayoutWidthTransition(t *testing.T) {
+	initialValue := strings.Repeat("very-long-title-", 20)
+	cfg := FormConfig{
+		Title: "Edit Issue",
+		Fields: []FieldConfig{
+			{Key: "title", Type: FieldTypeText, Label: "Title", InitialValue: initialValue, Column: 0},
+			{Key: "description", Type: FieldTypeTextArea, Label: "Description", InitialValue: "desc", Column: 1, MaxHeight: 3},
+		},
+		Columns:             []ColumnConfig{{}, {}},
+		ColumnGap:           3,
+		MinMultiColumnWidth: 100,
+		MinWidth:            50,
+	}
+
+	m := New(cfg).SetSize(200, 40) // wide multi-column
+	_ = m.View()
+	valueBefore := m.fields[0].textInput.Value()
+	cursorBefore := m.fields[0].textInput.Position()
+
+	m = m.SetSize(100, 40) // narrower multi-column (smaller per-column width)
+	view := m.View()
+
+	require.Equal(t, valueBefore, m.fields[0].textInput.Value())
+	require.Equal(t, cursorBefore, m.fields[0].textInput.Position())
+
+	// Modal-level containment: no rendered line should exceed the modal width.
+	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
+	require.NotEmpty(t, lines)
+	modalWidth := lipgloss.Width(lines[0])
+	for _, line := range lines {
+		require.LessOrEqual(t, lipgloss.Width(line), modalWidth, "line exceeds modal width: %q", line)
+	}
+
+	modalContentWidth := cfg.MinWidth
+	if modalContentWidth == 0 {
+		modalContentWidth = 50
+	}
+	if m.useMultiColumnLayout() {
+		computedModalWidth := m.width * 80 / 100
+		if computedModalWidth < 80 {
+			computedModalWidth = 80
+		}
+		if computedModalWidth > 140 {
+			computedModalWidth = 140
+		}
+		if computedModalWidth > modalContentWidth {
+			modalContentWidth = computedModalWidth
+		}
+	}
+
+	// Section-level containment: left text field stays within its section width.
+	colWidths := m.calculateColumnWidths(modalContentWidth - 2)
+	leftColWidth := colWidths[0]
+	leftFieldView := m.renderField(0, leftColWidth)
+	controlSeq := regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+	leftFieldClean := controlSeq.ReplaceAllString(leftFieldView, "")
+	leftFieldLines := strings.Split(strings.TrimSuffix(leftFieldClean, "\n"), "\n")
+	for _, line := range leftFieldLines {
+		require.LessOrEqual(t, lipgloss.Width(line), leftColWidth, "left field line exceeds section width: %q", line)
+	}
+
+	// Adjacent-space containment: inter-column gap must remain blank (no spill from title field).
+	body := m.renderMultiColumnBody(modalContentWidth, lipgloss.NewStyle().PaddingLeft(1))
+	bodyClean := controlSeq.ReplaceAllString(body, "")
+	bodyLines := strings.Split(strings.TrimSuffix(bodyClean, "\n"), "\n")
+	gapStart := 1 + leftColWidth // left content padding + left column width
+	gap := cfg.ColumnGap
+	if gap == 0 {
+		gap = 3
+	}
+	gapEnd := gapStart + gap
+	checkedGapLines := 0
+	for _, line := range bodyLines {
+		runes := []rune(line)
+		if len(runes) < gapEnd {
+			continue
+		}
+		for i := gapStart; i < gapEnd; i++ {
+			require.Equal(t, ' ', runes[i], "expected blank column gap, got spill in line: %q", line)
+		}
+		checkedGapLines++
+	}
+	require.Greater(t, checkedGapLines, 0, "expected to validate at least one joined multi-column line")
+}
+
+func TestTextAreaField_View_LongValueContainedAcrossLayoutWidthTransition(t *testing.T) {
+	const titleOverflowSentinel = "OVERLAP_SENTINEL"
+	const descriptionSentinel = "DESC_SENTINEL"
+
+	initialValue := titleOverflowSentinel + " " + strings.Repeat("very-long-title-", 20)
+	cfg := FormConfig{
+		Title: "Edit Issue",
+		Fields: []FieldConfig{
+			{Key: "title", Type: FieldTypeTextArea, Label: "Title", InitialValue: initialValue, Column: 0, MaxHeight: 3},
+			{Key: "description", Type: FieldTypeTextArea, Label: "Description", InitialValue: descriptionSentinel, Column: 1, MaxHeight: 3},
+		},
+		Columns:             []ColumnConfig{{}, {}},
+		ColumnGap:           3,
+		MinMultiColumnWidth: 100,
+		MinWidth:            50,
+	}
+
+	m := New(cfg).SetSize(200, 40) // wide multi-column
+	_ = m.View()
+	valueBefore := m.fields[0].textArea.Value()
+
+	m = m.SetSize(100, 40) // narrower multi-column (smaller per-column width)
+	view := m.View()
+	controlSeq := regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+	cleanView := controlSeq.ReplaceAllString(view, "")
+	require.Equal(t, valueBefore, m.fields[0].textArea.Value())
+	require.Contains(t, cleanView, titleOverflowSentinel, "expected wrapped title content to be visible in left column")
+
+	// Modal-level containment: no rendered line should exceed the modal width.
+	lines := strings.Split(strings.TrimSuffix(cleanView, "\n"), "\n")
+	require.NotEmpty(t, lines)
+	modalWidth := lipgloss.Width(lines[0])
+	for _, line := range lines {
+		require.LessOrEqual(t, lipgloss.Width(line), modalWidth, "line exceeds modal width: %q", line)
+	}
+
+	modalContentWidth := cfg.MinWidth
+	if modalContentWidth == 0 {
+		modalContentWidth = 50
+	}
+	if m.useMultiColumnLayout() {
+		computedModalWidth := m.width * 80 / 100
+		if computedModalWidth < 80 {
+			computedModalWidth = 80
+		}
+		if computedModalWidth > 140 {
+			computedModalWidth = 140
+		}
+		if computedModalWidth > modalContentWidth {
+			modalContentWidth = computedModalWidth
+		}
+	}
+
+	// Section-level containment: left textarea stays within its section width.
+	colWidths := m.calculateColumnWidths(modalContentWidth - 2)
+	leftColWidth := colWidths[0]
+	leftFieldView := m.renderField(0, leftColWidth)
+	leftFieldClean := controlSeq.ReplaceAllString(leftFieldView, "")
+	leftFieldLines := strings.Split(strings.TrimSuffix(leftFieldClean, "\n"), "\n")
+	for _, line := range leftFieldLines {
+		require.LessOrEqual(t, lipgloss.Width(line), leftColWidth, "left field line exceeds section width: %q", line)
+	}
+
+	// Adjacent-column containment: title text must not appear in the description column.
+	var descriptionRow string
+	for _, line := range strings.Split(cleanView, "\n") {
+		if strings.Contains(line, descriptionSentinel) {
+			descriptionRow = line
+			break
+		}
+	}
+	require.NotEmpty(t, descriptionRow, "expected to find description row containing sentinel text")
+	parts := strings.SplitN(descriptionRow, "│   │", 2)
+	require.Len(t, parts, 2, "expected two-column row delimiter between Title and Description sections")
+	require.NotContains(t, parts[1], titleOverflowSentinel, "title overflow should never appear in Description column")
+
+	// Adjacent-space containment: inter-column gap must remain blank.
+	body := m.renderMultiColumnBody(modalContentWidth, lipgloss.NewStyle().PaddingLeft(1))
+	bodyClean := controlSeq.ReplaceAllString(body, "")
+	bodyLines := strings.Split(strings.TrimSuffix(bodyClean, "\n"), "\n")
+	gapStart := 1 + leftColWidth // left content padding + left column width
+	gap := cfg.ColumnGap
+	if gap == 0 {
+		gap = 3
+	}
+	gapEnd := gapStart + gap
+	checkedGapLines := 0
+	for _, line := range bodyLines {
+		runes := []rune(line)
+		if len(runes) < gapEnd {
+			continue
+		}
+		for i := gapStart; i < gapEnd; i++ {
+			require.Equal(t, ' ', runes[i], "expected blank column gap, got spill in line: %q", line)
+		}
+		checkedGapLines++
+	}
+	require.Greater(t, checkedGapLines, 0, "expected to validate at least one joined multi-column line")
 }
 
 // --- EpicSearch Field Tests ---

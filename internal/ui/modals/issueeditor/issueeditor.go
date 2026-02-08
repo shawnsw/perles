@@ -77,8 +77,14 @@ func (m SaveMsg) BuildUpdateOptions(original *beads.Issue) beads.UpdateIssueOpti
 	return opts
 }
 
-// New creates a new issue editor with the given issue.
+// New creates a new issue editor with vim mode disabled by default.
+// Use NewWithVimMode to control vim behavior from user configuration.
 func New(issue beads.Issue) Model {
+	return NewWithVimMode(issue, false)
+}
+
+// NewWithVimMode creates a new issue editor with the given issue and vim mode setting.
+func NewWithVimMode(issue beads.Issue, vimEnabled bool) Model {
 	m := Model{issue: issue}
 
 	cfg := formmodal.FormConfig{
@@ -93,11 +99,13 @@ func New(issue beads.Issue) Model {
 			// Column 0 (left/metadata): title, priority, status, labels
 			{
 				Key:          "title",
-				Type:         formmodal.FieldTypeText,
+				Type:         formmodal.FieldTypeTextArea,
 				Label:        "Title",
 				Placeholder:  "Issue title...",
 				InitialValue: issue.TitleText,
 				MaxLength:    200,
+				MaxHeight:    3,
+				VimEnabled:   vimEnabled,
 				Column:       0,
 			},
 			{
@@ -135,7 +143,7 @@ func New(issue beads.Issue) Model {
 				Hint:         "Ctrl+G for editor",
 				Placeholder:  "Issue description...",
 				InitialValue: issue.DescriptionText,
-				VimEnabled:   true,
+				VimEnabled:   vimEnabled,
 				MaxHeight:    8,
 				Column:       1,
 			},
@@ -146,7 +154,7 @@ func New(issue beads.Issue) Model {
 				Hint:         "Ctrl+G for editor",
 				Placeholder:  "Issue notes...",
 				InitialValue: issue.Notes,
-				VimEnabled:   true,
+				VimEnabled:   vimEnabled,
 				MaxHeight:    8,
 				Column:       1,
 			},

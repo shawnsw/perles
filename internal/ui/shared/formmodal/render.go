@@ -322,7 +322,14 @@ func (m Model) renderField(index int, width int) string {
 	case FieldTypeText:
 		// Set input width to fill available space
 		// width - 2 for FormSection borders, - 1 for cursor padding
-		fs.textInput.Width = width - 3
+		newInputWidth := width - 3
+		if fs.textInput.Width != newInputWidth {
+			// Recompute textinput overflow window after render-time width transitions
+			// while preserving value and cursor position.
+			cursorPos := fs.textInput.Position()
+			fs.textInput.Width = newInputWidth
+			fs.textInput.SetCursor(cursorPos)
+		}
 		rendered = styles.FormSection(styles.FormSectionConfig{
 			Content:            []string{fs.textInput.View()},
 			Width:              width,

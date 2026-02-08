@@ -1390,6 +1390,18 @@ func (m Model) handleKeyForTextArea(msg tea.KeyMsg, fs *fieldState) (Model, tea.
 		return m, m.blinkCmd()
 	}
 
+	// Non-vim textareas should keep text-field-like vertical navigation flow.
+	if !fs.config.VimEnabled {
+		if key.Matches(msg, keys.Common.Down) {
+			m = m.nextField()
+			return m, m.blinkCmd()
+		}
+		if key.Matches(msg, keys.Common.Up) {
+			m = m.prevField()
+			return m, m.blinkCmd()
+		}
+	}
+
 	// Forward all other keys to the vimtextarea
 	var cmd tea.Cmd
 	fs.textArea, cmd = fs.textArea.Update(msg)

@@ -220,7 +220,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case OpenEditMenuMsg:
 		issue := msg.Issue
 		m.editingIssue = &issue // Store for title/description comparison on save
-		m.issueEditor = issueeditor.New(msg.Issue).
+		m.issueEditor = issueeditor.NewWithVimMode(msg.Issue, m.services.Config.UI.VimMode).
 			SetSize(m.width, m.height)
 		m.view = ViewEditIssue
 		return m, m.issueEditor.Init()
