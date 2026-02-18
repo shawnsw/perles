@@ -2125,6 +2125,128 @@ func TestSearch_ActionsLoadedFromConfig(t *testing.T) {
 
 // Mouse click tests
 
+func TestSearch_MouseClick_SearchInputFocusesFromResults(t *testing.T) {
+	m := createTestModelWithResults(t)
+	m.focus = FocusResults
+	m.input.Blur()
+
+	// Render to register zones
+	_ = m.View()
+
+	var z *zone.ZoneInfo
+	for retries := 0; retries < 10; retries++ {
+		z = zone.Get(zoneSearchInput)
+		if z != nil && !z.IsZero() {
+			break
+		}
+		_ = m.View()
+		time.Sleep(time.Millisecond)
+	}
+	require.NotNil(t, z, "search input zone should be registered")
+	require.False(t, z.IsZero(), "search input zone should not be zero")
+
+	m, cmd := m.Update(tea.MouseMsg{
+		X:      z.StartX + 1,
+		Y:      z.StartY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionRelease,
+	})
+
+	require.Nil(t, cmd, "click on search input should not produce a command")
+	require.Equal(t, FocusSearch, m.focus, "focus should move to search input")
+	require.True(t, m.input.Focused(), "search input should be focused")
+}
+
+func TestSearch_MouseClick_SearchInputFocusesFromDetails(t *testing.T) {
+	m := createTestModelWithResults(t)
+	m.focus = FocusDetails
+	m.input.Blur()
+
+	_ = m.View()
+
+	var z *zone.ZoneInfo
+	for retries := 0; retries < 10; retries++ {
+		z = zone.Get(zoneSearchInput)
+		if z != nil && !z.IsZero() {
+			break
+		}
+		_ = m.View()
+		time.Sleep(time.Millisecond)
+	}
+	require.NotNil(t, z, "search input zone should be registered")
+
+	m, cmd := m.Update(tea.MouseMsg{
+		X:      z.StartX + 1,
+		Y:      z.StartY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionRelease,
+	})
+
+	require.Nil(t, cmd)
+	require.Equal(t, FocusSearch, m.focus, "focus should move to search input")
+	require.True(t, m.input.Focused(), "search input should be focused")
+}
+
+func TestSearch_MouseClick_DetailsPanelFocusesFromResults(t *testing.T) {
+	m := createTestModelWithResults(t)
+	m.focus = FocusResults
+
+	_ = m.View()
+
+	var z *zone.ZoneInfo
+	for retries := 0; retries < 10; retries++ {
+		z = zone.Get(zoneSearchDetails)
+		if z != nil && !z.IsZero() {
+			break
+		}
+		_ = m.View()
+		time.Sleep(time.Millisecond)
+	}
+	require.NotNil(t, z, "details zone should be registered")
+	require.False(t, z.IsZero(), "details zone should not be zero")
+
+	m, cmd := m.Update(tea.MouseMsg{
+		X:      z.StartX + 1,
+		Y:      z.StartY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionRelease,
+	})
+
+	require.Nil(t, cmd, "click on details should not produce a command")
+	require.Equal(t, FocusDetails, m.focus, "focus should move to details")
+	require.False(t, m.input.Focused(), "search input should be blurred")
+}
+
+func TestSearch_MouseClick_DetailsPanelFocusesFromSearch(t *testing.T) {
+	m := createTestModelWithResults(t)
+	m.focus = FocusSearch
+	m.input.Focus()
+
+	_ = m.View()
+
+	var z *zone.ZoneInfo
+	for retries := 0; retries < 10; retries++ {
+		z = zone.Get(zoneSearchDetails)
+		if z != nil && !z.IsZero() {
+			break
+		}
+		_ = m.View()
+		time.Sleep(time.Millisecond)
+	}
+	require.NotNil(t, z, "details zone should be registered")
+
+	m, cmd := m.Update(tea.MouseMsg{
+		X:      z.StartX + 1,
+		Y:      z.StartY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionRelease,
+	})
+
+	require.Nil(t, cmd)
+	require.Equal(t, FocusDetails, m.focus, "focus should move to details")
+	require.False(t, m.input.Focused(), "search input should be blurred after clicking details")
+}
+
 func TestSearch_MouseClick_IgnoresRightClick(t *testing.T) {
 	m := createTestModelWithResults(t)
 	m.focus = FocusResults
