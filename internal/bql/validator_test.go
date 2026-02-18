@@ -23,6 +23,9 @@ func TestValidate_ValidQueries(t *testing.T) {
 		"status = open",
 		"status = in_progress",
 		"status = closed",
+		"status = awaiting_review",
+		"status = in_review",
+		"status in (open, awaiting_review)",
 		"blocked = true",
 		"blocked = false",
 		"ready = true",
@@ -116,7 +119,6 @@ func TestValidate_InvalidValue(t *testing.T) {
 		query string
 	}{
 		{"invalid type value", "type = invalid"},
-		{"invalid status value", "status = pending"},
 		{"boolean field with string", "blocked = yes"},
 		{"priority field with string", "priority = high"},
 		{"priority integer too high", "priority = 5"},

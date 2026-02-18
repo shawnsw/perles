@@ -54,15 +54,6 @@ var ValidTypeValues = map[string]bool{
 	"chore":   true,
 }
 
-// ValidStatusValues are the valid values for the status field.
-var ValidStatusValues = map[string]bool{
-	"open":        true,
-	"in_progress": true,
-	"closed":      true,
-	"blocked":     true,
-	"deferred":    true,
-}
-
 // ValidPriorityValues are the valid values for the priority field.
 var ValidPriorityValues = map[string]bool{
 	"P0": true, "p0": true,
@@ -213,15 +204,11 @@ func validateValue(field string, fieldType FieldType, value Value) error {
 		}
 
 	case FieldEnum:
-		// Validate enum values
+		// Validate enum values (status accepts any string to support custom statuses)
 		switch field {
 		case "type":
 			if !ValidTypeValues[value.String] {
 				return fmt.Errorf("invalid value %q for field %q (valid: bug, feature, task, epic, chore)", value.String, field)
-			}
-		case "status":
-			if !ValidStatusValues[value.String] {
-				return fmt.Errorf("invalid value %q for field %q (valid: open, in_progress, closed, blocked, deferred)", value.String, field)
 			}
 		}
 
