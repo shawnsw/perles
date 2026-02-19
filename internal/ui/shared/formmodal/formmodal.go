@@ -1391,12 +1391,13 @@ func (m Model) handleKeyForTextArea(msg tea.KeyMsg, fs *fieldState) (Model, tea.
 	}
 
 	// Non-vim textareas should keep text-field-like vertical navigation flow.
+	// Use msg.Type to match only actual arrow keys, not j/k which should type characters.
 	if !fs.config.VimEnabled {
-		if key.Matches(msg, keys.Common.Down) {
+		if msg.Type == tea.KeyDown {
 			m = m.nextField()
 			return m, m.blinkCmd()
 		}
-		if key.Matches(msg, keys.Common.Up) {
+		if msg.Type == tea.KeyUp {
 			m = m.prevField()
 			return m, m.blinkCmd()
 		}

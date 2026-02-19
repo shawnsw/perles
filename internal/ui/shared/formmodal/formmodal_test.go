@@ -2802,6 +2802,51 @@ func TestTextAreaField_SubmitIncludesValue(t *testing.T) {
 	require.Equal(t, "My description", submitMsg.Values["description"])
 }
 
+func TestTextAreaField_JKTypesCharacters_NotNavigate(t *testing.T) {
+	cfg := FormConfig{
+		Title: "Test Form",
+		Fields: []FieldConfig{
+			{Key: "description", Type: FieldTypeTextArea, Label: "Description"},
+			{Key: "name", Type: FieldTypeText, Label: "Name"},
+		},
+	}
+	m := New(cfg)
+	require.Equal(t, 0, m.focusedIndex)
+
+	// Type "project" - contains j which should NOT navigate to the next field
+	for _, r := range "project" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	require.Equal(t, 0, m.focusedIndex, "j should not navigate away from textarea")
+	require.Equal(t, "project", m.fields[0].textArea.Value())
+
+	// Same for k - type "task"
+	m = New(cfg)
+	for _, r := range "task" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+
+	require.Equal(t, 0, m.focusedIndex, "k should not navigate away from textarea")
+	require.Equal(t, "task", m.fields[0].textArea.Value())
+}
+
+func TestTextAreaField_ArrowDownNavigatesToNextField(t *testing.T) {
+	cfg := FormConfig{
+		Title: "Test Form",
+		Fields: []FieldConfig{
+			{Key: "description", Type: FieldTypeTextArea, Label: "Description"},
+			{Key: "name", Type: FieldTypeText, Label: "Name"},
+		},
+	}
+	m := New(cfg)
+	require.Equal(t, 0, m.focusedIndex)
+
+	// Arrow down should still navigate (not broken by the fix)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	require.Equal(t, 1, m.focusedIndex, "arrow down should navigate to next field")
+}
+
 func TestTextAreaField_ForwardsNonKeyMessages(t *testing.T) {
 	cfg := FormConfig{
 		Title: "Test Form",
