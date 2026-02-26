@@ -71,14 +71,9 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Kanban.Refresh):
-		// Save cursor before refresh to restore position after
-		m.pendingCursor = m.saveCursor()
-		m.startReloadCycle()
-		m.manualRefreshed = true
-		m.autoRefreshed = false
-		// Invalidate other views so they reload when switched to
-		m.board = m.board.InvalidateViews()
-		return m, m.board.LoadAllColumns()
+		// Emit RequestRefreshMsg so the app can flush BQL/dep-graph caches
+		// before we re-query. Without this, stale cached data is returned.
+		return m, func() tea.Msg { return RequestRefreshMsg{} }
 
 	case key.Matches(msg, keys.Kanban.Yank):
 		// Yank (copy) selected issue ID to clipboard
@@ -576,6 +571,29 @@ func (m Model) HandleDBChanged() (Model, tea.Cmd) {
 	return m, m.board.LoadAllColumns()
 }
 
+// HandleManualRefresh processes a manual refresh request (from the "r" key).
+// Called by app.go after flushing BQL/dep-graph caches to ensure fresh data.
+func (m Model) HandleManualRefresh() (Model, tea.Cmd) {
+	m.pendingCursor = m.saveCursor()
+	m.startReloadCycle()
+	m.manualRefreshed = true
+	m.autoRefreshed = false
+	m.board = m.board.InvalidateViews()
+	return m, m.board.LoadAllColumns()
+}
+
+// HandlePostDeleteRefresh processes a board reload after an issue deletion.
+// Called by app.go after flushing BQL/dep-graph caches to ensure the deleted
+// issue is no longer returned by cached queries.
+func (m Model) HandlePostDeleteRefresh() (Model, tea.Cmd) {
+	m.startReloadCycle()
+	m.board = m.board.InvalidateViews()
+	return m, tea.Batch(
+		m.board.LoadAllColumns(),
+		func() tea.Msg { return mode.ShowToastMsg{Message: "Issue deleted", Style: toaster.StyleSuccess} },
+	)
+}
+
 // handleColEditorSave processes column editor save.
 func (m Model) handleColEditorSave(msg coleditor.SaveMsg) (Model, tea.Cmd) {
 	viewIndex := m.currentViewIndex()
@@ -769,16 +787,14 @@ func (m Model) handleIssueDeleted(msg issueDeletedMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	// Success: reset state, refresh board, show success toast
+	// Success: reset state, then ask app to flush caches before reloading.
+	// The kanban model does not own the BQL/dep-graph caches, so we emit
+	// PostDeleteRefreshMsg for the app to flush them and call back into
+	// HandlePostDeleteRefresh which does the actual board reload.
 	m.view = ViewBoard
 	m.deleteIssueIDs = nil
 	m.selectedIssue = nil
 	m.pendingCursor = nil // Don't try to restore cursor to deleted issue
-	m.startReloadCycle()
-	m.board = m.board.InvalidateViews()
 
-	return m, tea.Batch(
-		m.board.LoadAllColumns(),
-		func() tea.Msg { return mode.ShowToastMsg{Message: "Issue deleted", Style: toaster.StyleSuccess} },
-	)
+	return m, func() tea.Msg { return PostDeleteRefreshMsg{} }
 }

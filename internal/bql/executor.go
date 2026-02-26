@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/cachemanager"
 	"github.com/zjrosen/perles/internal/log"
@@ -21,9 +22,16 @@ type BQLExecutor interface {
 // Verify Executor implements BQLExecutor at compile time.
 var _ BQLExecutor = (*Executor)(nil)
 
+// querier is the common interface between *sql.DB and *sql.Tx for running queries.
+type querier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 // Executor runs BQL queries against the database.
 type Executor struct {
 	db            *sql.DB
+	dialect       appbeads.SQLDialect
 	cacheManager  cachemanager.CacheManager[string, []beads.Issue]
 	depGraphCache cachemanager.CacheManager[string, *DependencyGraph]
 }
@@ -34,11 +42,13 @@ const depGraphCacheKey = "__dependency_graph__"
 // NewExecutor creates a new query executor.
 func NewExecutor(
 	db *sql.DB,
+	dialect appbeads.SQLDialect,
 	cacheManager cachemanager.CacheManager[string, []beads.Issue],
 	depGraphCache cachemanager.CacheManager[string, *DependencyGraph],
 ) *Executor {
 	return &Executor{
 		db:            db,
+		dialect:       dialect,
 		cacheManager:  cacheManager,
 		depGraphCache: depGraphCache,
 	}
@@ -62,6 +72,43 @@ type DependencyGraph struct {
 }
 
 // Execute runs a BQL query and returns matching issues.
+// Dolt transient error retry configuration.
+// During rapid writes (e.g., bulk deletes), the Dolt server may return internal
+// errors like "unable to find field with index N in row of 0 columns" as its
+// MVCC state catches up. A brief retry with a fresh transaction resolves these.
+const (
+	doltRetryAttempts   = 6
+	doltRetryBaseDelay  = 250 * time.Millisecond
+	doltRetryMultiplier = 2 // exponential backoff: 250ms, 500ms, 1s, 2s, 4s
+)
+
+// isDoltTransientError returns true if the error is a transient Dolt server
+// inconsistency that is likely to resolve on retry with a fresh snapshot.
+func isDoltTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	// Dolt internal error during concurrent modifications
+	if strings.Contains(errStr, "unable to find field with index") {
+		return true
+	}
+	// MySQL driver transient errors
+	if strings.Contains(errStr, "driver: bad connection") {
+		return true
+	}
+	if strings.Contains(errStr, "invalid connection") {
+		return true
+	}
+	if strings.Contains(errStr, "broken pipe") {
+		return true
+	}
+	if strings.Contains(errStr, "connection reset") {
+		return true
+	}
+	return false
+}
+
 func (e *Executor) Execute(input string) ([]beads.Issue, error) {
 	start := time.Now()
 
@@ -79,16 +126,26 @@ func (e *Executor) Execute(input string) ([]beads.Issue, error) {
 		return nil, fmt.Errorf("validation error: %w", err)
 	}
 
-	// Execute query, using cache if available
-	executeQuery := func() ([]beads.Issue, error) {
-		issues, err := e.executeBaseQuery(query)
+	// executeWithSnapshot runs all queries in a single transaction (Dolt) or
+	// directly against the DB (SQLite). Each call gets a fresh MVCC snapshot.
+	executeWithSnapshot := func() ([]beads.Issue, error) {
+		var q querier = e.db
+		if e.dialect == appbeads.DialectMySQL {
+			tx, err := e.db.Begin()
+			if err != nil {
+				return nil, fmt.Errorf("begin transaction: %w", err)
+			}
+			q = tx
+			defer func() { _ = tx.Rollback() }()
+		}
+
+		issues, err := e.executeBaseQuery(query, q)
 		if err != nil {
 			return nil, err
 		}
 
-		// Apply expansion if specified
 		if query.HasExpand() {
-			issues, err = e.expandIssues(issues, query.Expand)
+			issues, err = e.expandIssues(issues, query.Expand, q)
 			if err != nil {
 				return nil, err
 			}
@@ -97,10 +154,35 @@ func (e *Executor) Execute(input string) ([]beads.Issue, error) {
 		return issues, nil
 	}
 
+	// Wrap with retry for transient Dolt errors. Each retry opens a fresh
+	// transaction so the snapshot advances past the inconsistency.
+	executeWithRetry := func() ([]beads.Issue, error) {
+		attempts := 1
+		if e.dialect == appbeads.DialectMySQL {
+			attempts = doltRetryAttempts
+		}
+		var lastErr error
+		for i := range attempts {
+			issues, err := executeWithSnapshot()
+			if err == nil {
+				return issues, nil
+			}
+			lastErr = err
+			if !isDoltTransientError(err) || i == attempts-1 {
+				return nil, lastErr
+			}
+			delay := doltRetryBaseDelay * time.Duration(1<<uint(i)) // 250ms, 500ms, 1s, 2s, 4s
+			log.Debug(log.CatBQL, "Transient Dolt error, retrying",
+				"attempt", i+1, "delay", delay, "error", err, "query", input)
+			time.Sleep(delay)
+		}
+		return nil, lastErr
+	}
+
 	cache := cachemanager.NewReadThroughCache(
 		e.cacheManager,
-		func(ctx context.Context, q *Query) ([]beads.Issue, error) {
-			return executeQuery()
+		func(ctx context.Context, _ *Query) ([]beads.Issue, error) {
+			return executeWithRetry()
 		},
 		false,
 	)
@@ -125,19 +207,33 @@ type IssueDeps struct {
 	Discovered     []string // Issues discovered from this one
 }
 
+// softDeleteFilter returns the SQL WHERE clause fragment that excludes soft-deleted issues.
+// For SQLite, this includes both status and deleted_at checks (tombstone support).
+// For Dolt/MySQL, deleted_at column does not exist; hard deletes remove rows entirely.
+func (e *Executor) softDeleteFilter(alias string) string {
+	if e.dialect == appbeads.DialectMySQL {
+		// Dolt uses hard deletes; no tombstone columns exist.
+		// Status filter kept as defense-in-depth.
+		return alias + ".status NOT IN ('deleted', 'tombstone')"
+	}
+	// SQLite: belt-and-suspenders with both status and deleted_at checks.
+	return alias + ".status NOT IN ('deleted', 'tombstone') AND " + alias + ".deleted_at IS NULL"
+}
+
 // executeBaseQuery runs the main BQL filter query with batch-loaded dependencies.
 // This uses 3 total queries instead of 8N correlated subqueries:
 // 1. Main query (no dependency subqueries)
 // 2. Batch load dependencies for all result IDs
 // 3. Batch load labels for all result IDs
 // 4. Batch load comment counts for all result IDs
-func (e *Executor) executeBaseQuery(query *Query) ([]beads.Issue, error) {
+func (e *Executor) executeBaseQuery(query *Query, q querier) ([]beads.Issue, error) {
 	// Build SQL
-	builder := NewSQLBuilder(query)
+	builder := NewSQLBuilder(query, e.dialect)
 	whereClause, orderBy, params := builder.Build()
 
 	// Construct main query WITHOUT dependency subqueries
-	sqlQuery := `
+	//nolint:gosec // G201: softDeleteFilter returns hardcoded SQL fragments with table alias, not user input
+	sqlQuery := fmt.Sprintf(`
 		SELECT
 			i.id,
 			i.title,
@@ -166,9 +262,8 @@ func (e *Executor) executeBaseQuery(query *Query) ([]beads.Issue, error) {
 			i.rig,
 			i.mol_type
 		FROM issues i
-		WHERE i.status not in ('deleted', 'tombstone')
-	  AND i.deleted_at is null
-	`
+		WHERE %s
+	`, e.softDeleteFilter("i"))
 
 	if whereClause != "" {
 		sqlQuery += " AND " + whereClause //nolint:gosec // whereClause is built from validated BQL fields, not raw user input
@@ -181,7 +276,7 @@ func (e *Executor) executeBaseQuery(query *Query) ([]beads.Issue, error) {
 	}
 
 	// Execute main query
-	rows, err := e.db.Query(sqlQuery, params...)
+	rows, err := q.Query(sqlQuery, params...)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "Query failed", err)
 		return nil, fmt.Errorf("query error: %w", err)
@@ -205,19 +300,19 @@ func (e *Executor) executeBaseQuery(query *Query) ([]beads.Issue, error) {
 	}
 
 	// Batch load dependencies (1 query)
-	deps, err := e.loadDependenciesForIssues(ids)
+	deps, err := e.loadDependenciesForIssues(ids, q)
 	if err != nil {
 		return nil, fmt.Errorf("load dependencies: %w", err)
 	}
 
 	// Batch load labels (1 query)
-	labels, err := e.loadLabelsForIssues(ids)
+	labels, err := e.loadLabelsForIssues(ids, q)
 	if err != nil {
 		return nil, fmt.Errorf("load labels: %w", err)
 	}
 
 	// Batch load comment counts (1 query)
-	commentCounts, err := e.loadCommentCountsForIssues(ids)
+	commentCounts, err := e.loadCommentCountsForIssues(ids, q)
 	if err != nil {
 		return nil, fmt.Errorf("load comment counts: %w", err)
 	}
@@ -371,7 +466,7 @@ func (e *Executor) scanIssuesBase(rows *sql.Rows) ([]beads.Issue, error) {
 // loadDependenciesForIssues batch-loads all dependency data for the given issue IDs.
 // Returns a map of issue ID -> IssueDeps with grouped dependencies by type.
 // This replaces 6 correlated subqueries with a single IN-clause query.
-func (e *Executor) loadDependenciesForIssues(ids []string) (map[string]IssueDeps, error) {
+func (e *Executor) loadDependenciesForIssues(ids []string, q querier) (map[string]IssueDeps, error) {
 	if len(ids) == 0 {
 		return make(map[string]IssueDeps), nil
 	}
@@ -392,24 +487,23 @@ func (e *Executor) loadDependenciesForIssues(ids []string) (map[string]IssueDeps
 
 	// Single query to get all dependencies for all issues (both directions)
 	// Filter out deleted issues on the related side
+	softDelete := e.softDeleteFilter("i")
 	//nolint:gosec // G201: inClause contains only "?" placeholders, not user input
 	query := fmt.Sprintf(`
 		SELECT d.issue_id, d.depends_on_id, d.type
 		FROM dependencies d
 		JOIN issues i ON d.depends_on_id = i.id
 		WHERE d.issue_id IN (%s)
-		  AND i.status NOT IN ('deleted', 'tombstone')
-		  AND i.deleted_at IS NULL
+		  AND %s
 		UNION
 		SELECT d.issue_id, d.depends_on_id, d.type
 		FROM dependencies d
 		JOIN issues i ON d.issue_id = i.id
 		WHERE d.depends_on_id IN (%s)
-		  AND i.status NOT IN ('deleted', 'tombstone')
-		  AND i.deleted_at IS NULL
-	`, inClause, inClause)
+		  AND %s
+	`, inClause, softDelete, inClause, softDelete)
 
-	rows, err := e.db.Query(query, params...)
+	rows, err := q.Query(query, params...)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "Failed to batch load dependencies", err)
 		return nil, fmt.Errorf("batch load dependencies: %w", err)
@@ -485,7 +579,7 @@ func (e *Executor) loadDependenciesForIssues(ids []string) (map[string]IssueDeps
 
 // loadLabelsForIssues batch-loads all labels for the given issue IDs.
 // Returns a map of issue ID -> label slice.
-func (e *Executor) loadLabelsForIssues(ids []string) (map[string][]string, error) {
+func (e *Executor) loadLabelsForIssues(ids []string, q querier) (map[string][]string, error) {
 	if len(ids) == 0 {
 		return make(map[string][]string), nil
 	}
@@ -506,7 +600,7 @@ func (e *Executor) loadLabelsForIssues(ids []string) (map[string][]string, error
 		WHERE issue_id IN (%s)
 	`, inClause)
 
-	rows, err := e.db.Query(query, params...)
+	rows, err := q.Query(query, params...)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "Failed to batch load labels", err)
 		return nil, fmt.Errorf("batch load labels: %w", err)
@@ -533,7 +627,7 @@ func (e *Executor) loadLabelsForIssues(ids []string) (map[string][]string, error
 
 // loadCommentCountsForIssues batch-loads comment counts for the given issue IDs.
 // Returns a map of issue ID -> comment count.
-func (e *Executor) loadCommentCountsForIssues(ids []string) (map[string]int, error) {
+func (e *Executor) loadCommentCountsForIssues(ids []string, q querier) (map[string]int, error) {
 	if len(ids) == 0 {
 		return make(map[string]int), nil
 	}
@@ -555,7 +649,7 @@ func (e *Executor) loadCommentCountsForIssues(ids []string) (map[string]int, err
 		GROUP BY issue_id
 	`, inClause)
 
-	rows, err := e.db.Query(query, params...)
+	rows, err := q.Query(query, params...)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "Failed to batch load comment counts", err)
 		return nil, fmt.Errorf("batch load comment counts: %w", err)
@@ -585,13 +679,13 @@ func (e *Executor) loadCommentCountsForIssues(ids []string) (map[string]int, err
 // This approach loads the full dependency graph once (1 SQL query) and traverses in-memory,
 // then batch-fetches all discovered issues (1 SQL query). This replaces the previous O(D×N)
 // iterative SQL approach with O(2) queries + O(V+E) in-memory traversal.
-func (e *Executor) expandIssues(baseIssues []beads.Issue, expand *ExpandClause) ([]beads.Issue, error) {
+func (e *Executor) expandIssues(baseIssues []beads.Issue, expand *ExpandClause, q querier) ([]beads.Issue, error) {
 	if len(baseIssues) == 0 {
 		return baseIssues, nil
 	}
 
 	// Step 1: Load the full dependency graph (ONE SQL query)
-	graph, err := e.loadDependencyGraph()
+	graph, err := e.loadDependencyGraph(q)
 	if err != nil {
 		return nil, fmt.Errorf("load dependency graph: %w", err)
 	}
@@ -624,7 +718,7 @@ func (e *Executor) expandIssues(baseIssues []beads.Issue, expand *ExpandClause) 
 	}
 
 	// Step 5: Batch fetch all new issues (ONE SQL query)
-	newIssues, err := e.fetchIssuesByIDs(newIDs)
+	newIssues, err := e.fetchIssuesByIDs(newIDs, q)
 	if err != nil {
 		return nil, fmt.Errorf("fetch expanded issues: %w", err)
 	}
@@ -689,11 +783,11 @@ func IsBQLQuery(input string) bool {
 // loadDependencyGraph returns the cached dependency graph, loading from DB if not cached.
 // Uses read-through cache pattern - invalidated automatically when cache is flushed on DB change.
 // This enables O(1) SQL queries + O(V+E) in-memory traversal instead of O(D×N) iterative queries.
-func (e *Executor) loadDependencyGraph() (*DependencyGraph, error) {
+func (e *Executor) loadDependencyGraph(q querier) (*DependencyGraph, error) {
 	cache := cachemanager.NewReadThroughCache(
 		e.depGraphCache,
 		func(ctx context.Context, _ struct{}) (*DependencyGraph, error) {
-			return e.loadDependencyGraphFromDB()
+			return e.loadDependencyGraphFromDB(q)
 		},
 		false,
 	)
@@ -701,21 +795,20 @@ func (e *Executor) loadDependencyGraph() (*DependencyGraph, error) {
 }
 
 // loadDependencyGraphFromDB loads the full dependency graph from the database in a single query.
-func (e *Executor) loadDependencyGraphFromDB() (*DependencyGraph, error) {
+func (e *Executor) loadDependencyGraphFromDB(q querier) (*DependencyGraph, error) {
 	log.Debug(log.CatBQL, "Loading dependency graph from database")
 
-	query := `
+	//nolint:gosec // G201: softDeleteFilter returns hardcoded SQL fragments with table alias, not user input
+	query := fmt.Sprintf(`
 		SELECT d.issue_id, d.depends_on_id, d.type
 		FROM dependencies d
 		JOIN issues i1 ON d.issue_id = i1.id
 		JOIN issues i2 ON d.depends_on_id = i2.id
-		WHERE i1.status NOT IN ('deleted', 'tombstone')
-		  AND i2.status NOT IN ('deleted', 'tombstone')
-		  AND i1.deleted_at IS NULL
-		  AND i2.deleted_at IS NULL
-	`
+		WHERE %s
+		  AND %s
+	`, e.softDeleteFilter("i1"), e.softDeleteFilter("i2"))
 
-	rows, err := e.db.Query(query)
+	rows, err := q.Query(query)
 	if err != nil {
 		log.ErrorErr(log.CatDB, "Failed to load dependency graph", err)
 		return nil, fmt.Errorf("load dependency graph: %w", err)
@@ -844,7 +937,7 @@ func (e *Executor) getNeighbors(graph *DependencyGraph, id string, expandType Ex
 }
 
 // fetchIssuesByIDs fetches issues by their IDs by delegating to executeBaseQuery.
-func (e *Executor) fetchIssuesByIDs(ids []string) ([]beads.Issue, error) {
+func (e *Executor) fetchIssuesByIDs(ids []string, q querier) ([]beads.Issue, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -862,5 +955,5 @@ func (e *Executor) fetchIssuesByIDs(ids []string) ([]beads.Issue, error) {
 			Values: values,
 		},
 	}
-	return e.executeBaseQuery(query)
+	return e.executeBaseQuery(query, q)
 }

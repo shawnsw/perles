@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/pubsub"
 	"github.com/zjrosen/perles/internal/watcher"
 )
@@ -169,10 +170,20 @@ func TestWatcher_WatchesWALFile(t *testing.T) {
 
 func TestDefaultConfig(t *testing.T) {
 	dbPath := "/test/beads.db"
-	cfg := watcher.DefaultConfig(dbPath)
+	cfg := watcher.DefaultConfig(dbPath, appbeads.DialectSQLite)
 
 	require.Equal(t, dbPath, cfg.DBPath)
 	require.Equal(t, 100*time.Millisecond, cfg.DebounceDur)
+	require.Equal(t, appbeads.DialectSQLite, cfg.Dialect)
+}
+
+func TestDefaultConfig_Dolt(t *testing.T) {
+	dbPath := "/test/.beads/dolt"
+	cfg := watcher.DefaultConfig(dbPath, appbeads.DialectMySQL)
+
+	require.Equal(t, dbPath, cfg.DBPath)
+	require.Equal(t, 500*time.Millisecond, cfg.DebounceDur, "Dolt debounce should be longer to coalesce rapid bd commands")
+	require.Equal(t, appbeads.DialectMySQL, cfg.Dialect)
 }
 
 func TestWatcher_BrokerAccessor(t *testing.T) {
@@ -477,4 +488,191 @@ func TestWatcher_MultipleSubscribers(t *testing.T) {
 	}
 
 	require.Equal(t, 3, receivedCount, "all three subscribers should receive the event")
+}
+
+// =============================================================================
+// Dolt Dialect Tests
+//
+// In Dolt server mode, the watcher monitors the .beads/ directory for changes
+// to the "last-touched" sentinel file, which bd writes on every operation.
+// This is more reliable than watching noms files because the Dolt server's
+// data directory may reside in a different project (shared multi-database server).
+//
+// Test directory layout mirrors production:
+//   dir/           (= .beads/)
+//   dir/dolt/      (= .beads/dolt, used as dbPath)
+//   dir/last-touched
+// =============================================================================
+
+func TestDolt_WatchesLastTouchedFile(t *testing.T) {
+	// Simulate .beads/ directory with dolt subdirectory
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "dolt")
+	err := os.MkdirAll(dbPath, 0755)
+	require.NoError(t, err, "failed to create dolt directory")
+
+	lastTouchedPath := filepath.Join(dir, "last-touched")
+	err = os.WriteFile(lastTouchedPath, []byte("2024-01-01"), 0644)
+	require.NoError(t, err, "failed to create last-touched file")
+
+	w, err := watcher.New(watcher.Config{
+		DBPath:      dbPath,
+		DebounceDur: 50 * time.Millisecond,
+		Dialect:     appbeads.DialectMySQL,
+	})
+	require.NoError(t, err, "failed to create watcher")
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err, "failed to start watcher")
+
+	// Write to last-touched should trigger notification
+	err = os.WriteFile(lastTouchedPath, []byte("2024-01-02"), 0644)
+	require.NoError(t, err, "failed to write last-touched file")
+
+	select {
+	case evt := <-sub:
+		require.Equal(t, watcher.DBChanged, evt.Payload.Type, "expected DBChanged event for last-touched write")
+	case <-time.After(200 * time.Millisecond):
+		require.Fail(t, "expected notification for last-touched file write")
+	}
+}
+
+func TestDolt_IgnoresIrrelevantFiles(t *testing.T) {
+	// Dolt watcher should ignore non-last-touched files in .beads/
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "dolt")
+	err := os.MkdirAll(dbPath, 0755)
+	require.NoError(t, err, "failed to create dolt directory")
+
+	lastTouchedPath := filepath.Join(dir, "last-touched")
+	err = os.WriteFile(lastTouchedPath, []byte("2024-01-01"), 0644)
+	require.NoError(t, err, "failed to create last-touched file")
+
+	// Pre-create irrelevant files that exist in .beads/
+	serverLogPath := filepath.Join(dir, "dolt-server.log")
+	err = os.WriteFile(serverLogPath, []byte("log data"), 0644)
+	require.NoError(t, err, "failed to create server log file")
+
+	w, err := watcher.New(watcher.Config{
+		DBPath:      dbPath,
+		DebounceDur: 50 * time.Millisecond,
+		Dialect:     appbeads.DialectMySQL,
+	})
+	require.NoError(t, err, "failed to create watcher")
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err, "failed to start watcher")
+
+	// Write to server log should NOT trigger notification
+	err = os.WriteFile(serverLogPath, []byte("more log data"), 0644)
+	require.NoError(t, err, "failed to write server log file")
+
+	select {
+	case <-sub:
+		require.Fail(t, "should not notify for non-last-touched files in Dolt mode")
+	case <-time.After(100 * time.Millisecond):
+		// Expected - no notification for irrelevant file
+	}
+}
+
+func TestDolt_IgnoresSQLiteFiles(t *testing.T) {
+	// Dolt watcher should NOT react to beads.db files
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "dolt")
+	err := os.MkdirAll(dbPath, 0755)
+	require.NoError(t, err, "failed to create dolt directory")
+
+	lastTouchedPath := filepath.Join(dir, "last-touched")
+	err = os.WriteFile(lastTouchedPath, []byte("2024-01-01"), 0644)
+	require.NoError(t, err, "failed to create last-touched file")
+
+	// Create a beads.db file in the watched dir (shouldn't match for Dolt)
+	sqlitePath := filepath.Join(dir, "beads.db")
+	err = os.WriteFile(sqlitePath, []byte("sqlite"), 0644)
+	require.NoError(t, err, "failed to create beads.db file")
+
+	w, err := watcher.New(watcher.Config{
+		DBPath:      dbPath,
+		DebounceDur: 50 * time.Millisecond,
+		Dialect:     appbeads.DialectMySQL,
+	})
+	require.NoError(t, err, "failed to create watcher")
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err, "failed to start watcher")
+
+	// Write to beads.db should NOT trigger for Dolt dialect
+	err = os.WriteFile(sqlitePath, []byte("sqlite modified"), 0644)
+	require.NoError(t, err, "failed to write beads.db file")
+
+	select {
+	case <-sub:
+		require.Fail(t, "Dolt watcher should not react to beads.db files")
+	case <-time.After(100 * time.Millisecond):
+		// Expected
+	}
+}
+
+func TestDolt_DebounceLastTouchedWrites(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "dolt")
+	err := os.MkdirAll(dbPath, 0755)
+	require.NoError(t, err, "failed to create dolt directory")
+
+	lastTouchedPath := filepath.Join(dir, "last-touched")
+	err = os.WriteFile(lastTouchedPath, []byte("initial"), 0644)
+	require.NoError(t, err, "failed to create last-touched file")
+
+	w, err := watcher.New(watcher.Config{
+		DBPath:      dbPath,
+		DebounceDur: 150 * time.Millisecond,
+		Dialect:     appbeads.DialectMySQL,
+	})
+	require.NoError(t, err, "failed to create watcher")
+	defer func() { _ = w.Stop() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := w.Broker().Subscribe(ctx)
+
+	err = w.Start()
+	require.NoError(t, err, "failed to start watcher")
+
+	// Rapid last-touched writes (simulating rapid bd commands) should coalesce
+	for i := 0; i < 10; i++ {
+		err := os.WriteFile(lastTouchedPath, []byte(fmt.Sprintf("touch%d", i)), 0644)
+		require.NoError(t, err, "failed to write last-touched file")
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Should receive exactly one notification
+	select {
+	case evt := <-sub:
+		require.Equal(t, watcher.DBChanged, evt.Payload.Type, "expected DBChanged event")
+	case <-time.After(400 * time.Millisecond):
+		require.Fail(t, "expected notification but got timeout")
+	}
+
+	// No second notification
+	select {
+	case <-sub:
+		require.Fail(t, "unexpected second notification")
+	case <-time.After(200 * time.Millisecond):
+		// Expected
+	}
 }

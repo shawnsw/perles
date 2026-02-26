@@ -25,6 +25,7 @@ import (
 	"github.com/zjrosen/perles/internal/templates"
 	"github.com/zjrosen/perles/internal/ui/nobeads"
 	"github.com/zjrosen/perles/internal/ui/outdated"
+	"github.com/zjrosen/perles/internal/ui/serverdown"
 )
 
 func init() {
@@ -236,11 +237,15 @@ func runApp(cmd *cobra.Command, args []string) error {
 	cfg.ResolvedBeadsDir = paths.ResolveBeadsDir(dbPath)
 	log.Info(log.CatConfig, "resolved beads dir", "path", cfg.ResolvedBeadsDir)
 
-	client, err := infrabeads.NewSQLiteClient(cfg.ResolvedBeadsDir)
+	client, err := infrabeads.NewClient(cfg.ResolvedBeadsDir)
 	if err != nil {
-		// Show friendly TUI empty state instead of CLI error
+		// If metadata says dolt+server, the failure is a connection issue, not a missing .beads dir.
+		if meta, metaErr := infrabeads.LoadMetadata(cfg.ResolvedBeadsDir); metaErr == nil && meta.IsDoltServer() {
+			return serverNotStarted(meta.GetDoltServerHost(), meta.GetDoltServerPortWithDir(cfg.ResolvedBeadsDir))
+		}
 		return runNoBeadsMode()
 	}
+	defer func() { _ = client.Close() }()
 
 	// Version check - query bd_version from database metadata table
 	currentVersion, err := client.Version()
@@ -341,6 +346,21 @@ func SetVersion(v string) {
 // empty state view when no .beads directory is found.
 func runNoBeadsMode() error {
 	model := nobeads.New()
+	p := tea.NewProgram(
+		&model,
+		tea.WithAltScreen(),
+	)
+
+	_, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("running program: %w", err)
+	}
+	return nil
+}
+
+// serverNotStarted launches the TUI showing the Dolt server unreachable screen.
+func serverNotStarted(host string, port int) error {
+	model := serverdown.NewUnreachable(host, port)
 	p := tea.NewProgram(
 		&model,
 		tea.WithAltScreen(),

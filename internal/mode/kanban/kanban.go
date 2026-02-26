@@ -732,6 +732,17 @@ type SwitchToSearchMsg struct {
 // SwitchToDashboardMsg requests switching to the multi-workflow dashboard mode.
 type SwitchToDashboardMsg struct{}
 
+// RequestRefreshMsg requests the app flush caches and reload the kanban board.
+// Emitted by the "r" key handler so the app can flush BQL/dep-graph caches
+// (which the kanban model does not own) before re-querying.
+type RequestRefreshMsg struct{}
+
+// PostDeleteRefreshMsg requests the app flush caches and reload after an issue
+// deletion. The kanban model does not own the BQL/dep-graph caches, so the app
+// must flush them before re-querying to avoid serving stale cached results that
+// still include the deleted issue.
+type PostDeleteRefreshMsg struct{}
+
 // OpenEditMenuMsg requests opening the issue editor modal.
 type OpenEditMenuMsg struct {
 	Issue beads.Issue

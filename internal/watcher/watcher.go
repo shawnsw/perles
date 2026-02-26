@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/pubsub"
 
@@ -32,6 +33,7 @@ type WatcherEvent struct {
 type Watcher struct {
 	fsWatcher *fsnotify.Watcher
 	dbPath    string
+	dialect   appbeads.SQLDialect
 	debounce  time.Duration
 	done      chan struct{}
 	broker    *pubsub.Broker[WatcherEvent]
@@ -41,13 +43,21 @@ type Watcher struct {
 type Config struct {
 	DBPath      string
 	DebounceDur time.Duration
+	Dialect     appbeads.SQLDialect
 }
 
 // DefaultConfig returns sensible defaults for the watcher.
-func DefaultConfig(dbPath string) Config {
+func DefaultConfig(dbPath string, dialect appbeads.SQLDialect) Config {
+	debounce := 100 * time.Millisecond
+	if dialect == appbeads.DialectMySQL {
+		// Dolt mode uses a longer debounce to coalesce rapid bd commands
+		// (e.g., bulk creates/deletes in a loop) into a single refresh.
+		debounce = 500 * time.Millisecond
+	}
 	return Config{
 		DBPath:      dbPath,
-		DebounceDur: 100 * time.Millisecond,
+		DebounceDur: debounce,
+		Dialect:     dialect,
 	}
 }
 
@@ -63,17 +73,30 @@ func New(cfg Config) (*Watcher, error) {
 	return &Watcher{
 		fsWatcher: fsw,
 		dbPath:    cfg.DBPath,
+		dialect:   cfg.Dialect,
 		debounce:  cfg.DebounceDur,
 		done:      make(chan struct{}),
 		broker:    pubsub.NewBroker[WatcherEvent](),
 	}, nil
 }
 
+// watchDir returns the directory to watch based on the backend dialect.
+// Both backends watch the .beads/ directory (parent of dbPath):
+//   - SQLite: dbPath is .beads/beads.db → watches .beads/ for db/wal changes
+//   - Dolt server: dbPath is .beads/dolt → watches .beads/ for last-touched changes
+//
+// For Dolt, we watch the last-touched sentinel file rather than the noms directory
+// because the Dolt SQL server's data directory may reside in a different project
+// (e.g., a shared multi-database server). bd writes last-touched on every operation,
+// making it a reliable cross-topology change signal.
+func (w *Watcher) watchDir() string {
+	return filepath.Dir(w.dbPath)
+}
+
 // Start begins watching the database directory.
 // Subscribe to watcher events using Broker().Subscribe(ctx) instead of the old channel return.
 func (w *Watcher) Start() error {
-	// Watch the directory containing the database
-	dir := filepath.Dir(w.dbPath)
+	dir := w.watchDir()
 	if err := w.fsWatcher.Add(dir); err != nil {
 		log.ErrorErr(log.CatWatcher, "Failed to watch directory", err, "dir", dir)
 		return fmt.Errorf("watching directory %s: %w", dir, err)
@@ -177,12 +200,24 @@ func (w *Watcher) loop() {
 }
 
 // isRelevantEvent checks if the event should trigger a refresh.
+// For SQLite, watches beads.db and beads.db-wal files in .beads/.
+// For Dolt server mode, watches the last-touched sentinel file in .beads/.
+// bd writes last-touched on every write operation, providing a reliable
+// change signal regardless of where the Dolt server's data directory resides.
 func (w *Watcher) isRelevantEvent(event fsnotify.Event) bool {
-	// Only care about write or create operations (WAL file may be created fresh)
+	// Only care about write or create operations
 	if event.Op&(fsnotify.Write|fsnotify.Create) == 0 {
 		return false
 	}
 
 	base := filepath.Base(event.Name)
+	if w.dialect == appbeads.DialectMySQL {
+		// bd writes .beads/last-touched on every write operation.
+		// This is more reliable than watching noms files because the Dolt
+		// server's data directory may reside in a different project
+		// (e.g., a shared multi-database server on a different port).
+		return base == "last-touched"
+	}
+	// SQLite: database file and WAL
 	return base == "beads.db" || base == "beads.db-wal"
 }

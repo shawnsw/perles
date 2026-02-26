@@ -12,6 +12,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/zjrosen/perles/frontend"
+	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	beads "github.com/zjrosen/perles/internal/beads/domain"
 	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/bql"
@@ -118,7 +119,7 @@ type Model struct {
 //
 // Returns an error if database initialization fails (fail-fast behavior).
 func NewWithConfig(
-	client *infrabeads.SQLiteClient,
+	client appbeads.DBClient,
 	cfg config.Config,
 	bqlCache cachemanager.CacheManager[string, []beads.Issue],
 	depGraphCache cachemanager.CacheManager[string, *bql.DependencyGraph],
@@ -153,7 +154,7 @@ func NewWithConfig(
 	)
 
 	if cfg.AutoRefresh && dbPath != "" {
-		w, err := watcher.New(watcher.DefaultConfig(dbPath))
+		w, err := watcher.New(watcher.DefaultConfig(dbPath, client.Dialect()))
 		if err == nil {
 			if err := w.Start(); err == nil {
 				watcherHandle = w
@@ -188,7 +189,7 @@ func NewWithConfig(
 	// Create BQL executor only if client is available (nil when beads DB not present)
 	var bqlExec bql.BQLExecutor
 	if client != nil {
-		bqlExec = bql.NewExecutor(client.DB(), bqlCache, depGraphCache)
+		bqlExec = bql.NewExecutor(client.DB(), client.Dialect(), bqlCache, depGraphCache)
 	}
 
 	services := mode.Services{
@@ -454,10 +455,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return search.EnterMsg{SubMode: msg.SubMode, Query: msg.Query, IssueID: msg.IssueID}
 		}
 
+	case kanban.RequestRefreshMsg:
+		m.flushQueryCaches("manual refresh")
+		var cmd tea.Cmd
+		m.kanban, cmd = m.kanban.HandleManualRefresh()
+		return m, cmd
+
+	case kanban.PostDeleteRefreshMsg:
+		m.flushQueryCaches("post-delete kanban")
+		var cmd tea.Cmd
+		m.kanban, cmd = m.kanban.HandlePostDeleteRefresh()
+		return m, cmd
+
 	case search.ExitToKanbanMsg:
 		// Switch back to kanban mode from search
 		log.Info(log.CatMode, "Switching mode", "from", "search", "to", "kanban")
 		m.currentMode = mode.ModeKanban
+
+		// Flush caches so kanban picks up any changes made while in search mode.
+		m.flushQueryCaches("search to kanban")
 
 		// Calculate main content width based on chatpanel state and set size
 		// BEFORE RefreshFromConfig() so kanban has correct dimensions before layout recalculation
@@ -519,9 +535,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Reuse existing dashboard if initialized (preserves cached state), otherwise create new
 		if m.dashboard.IsInitialized() {
+			// Flush caches so the epic tree picks up any changes made while in kanban/search.
+			m.flushQueryCaches("kanban to dashboard")
 			m.dashboard = m.dashboard.SetSize(m.width, m.height).(dashboard.Model)
-			// Just refresh the workflow list - event subscription is still active
-			return m, m.dashboard.RefreshWorkflows()
+			// Refresh both the workflow list and the epic tree (if one is loaded).
+			var dbCmd tea.Cmd
+			m.dashboard, dbCmd = m.dashboard.HandleDBChanged()
+			return m, tea.Batch(m.dashboard.RefreshWorkflows(), dbCmd)
 		}
 
 		// First time: create dashboard model
@@ -546,6 +566,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Don't cleanup dashboard - keep event subscription alive so cache stays updated
 		m.currentMode = mode.ModeKanban
 
+		// Flush caches so kanban picks up any changes made while in dashboard mode.
+		m.flushQueryCaches("dashboard to kanban")
+
 		// Calculate main content width based on chatpanel state
 		mainWidth := m.width
 		if m.chatPanel.Visible() {
@@ -555,6 +578,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		var cmd tea.Cmd
 		m.kanban, cmd = m.kanban.RefreshFromConfig()
+		return m, cmd
+
+	case search.PostDeleteRefreshMsg:
+		m.flushQueryCaches("post-delete search")
+		var cmd tea.Cmd
+		m.search, cmd = m.search.HandlePostDeleteRefresh(msg.ParentID, msg.WasTreeRoot)
 		return m, cmd
 
 	case search.SaveSearchAsColumnMsg:
@@ -572,13 +601,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pubsub.Event[watcher.WatcherEvent]:
 		switch msg.Payload.Type {
 		case watcher.DBChanged:
-			if err := m.bqlCache.Flush(context.Background()); err != nil {
-				log.Warn(log.CatCache, "Failed to flush BQL cache on DB change", "error", err)
-			}
-			if err := m.depGraphCache.Flush(context.Background()); err != nil {
-				log.Warn(log.CatCache, "Failed to flush dep graph cache on DB change", "error", err)
-			}
-
+			m.flushQueryCaches("db change")
 			log.Debug(log.CatMode, "DB changed, refreshing active mode", "mode", m.currentMode)
 			var modeCmd tea.Cmd
 			switch m.currentMode {
@@ -815,6 +838,17 @@ func (m Model) switchMode() (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// flushQueryCaches flushes the BQL and dependency-graph caches so that
+// subsequent queries hit the database instead of returning stale results.
+func (m Model) flushQueryCaches(reason string) {
+	if err := m.bqlCache.Flush(context.Background()); err != nil {
+		log.Warn(log.CatCache, "Failed to flush BQL cache", "reason", reason, "error", err)
+	}
+	if err := m.depGraphCache.Flush(context.Background()); err != nil {
+		log.Warn(log.CatCache, "Failed to flush dep graph cache", "reason", reason, "error", err)
+	}
 }
 
 // handleSaveSearchAsColumn processes a save-search-as-column request.

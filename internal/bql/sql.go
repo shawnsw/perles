@@ -3,17 +3,20 @@ package bql
 import (
 	"fmt"
 	"strings"
+
+	appbeads "github.com/zjrosen/perles/internal/beads/application"
 )
 
 // SQLBuilder converts a BQL AST to SQL.
 type SQLBuilder struct {
-	query  *Query
-	params []any
+	query   *Query
+	params  []any
+	dialect appbeads.SQLDialect
 }
 
-// NewSQLBuilder creates a builder for the query.
-func NewSQLBuilder(query *Query) *SQLBuilder {
-	return &SQLBuilder{query: query}
+// NewSQLBuilder creates a builder for the query and dialect.
+func NewSQLBuilder(query *Query, dialect appbeads.SQLDialect) *SQLBuilder {
+	return &SQLBuilder{query: query, dialect: dialect}
 }
 
 // Build generates the SQL WHERE clause and ORDER BY.
@@ -59,18 +62,10 @@ func (b *SQLBuilder) buildCompare(e *CompareExpr) string {
 	// Handle special fields
 	switch e.Field {
 	case "blocked":
-		// blocked = true means has entries in blocked_issues_cache
-		if e.Value.Bool {
-			return "i.id IN (SELECT issue_id FROM blocked_issues_cache)"
-		}
-		return "i.id NOT IN (SELECT issue_id FROM blocked_issues_cache)"
+		return b.buildBlockedSQL(e.Value.Bool)
 
 	case "ready":
-		// ready = true means in ready_issues view
-		if e.Value.Bool {
-			return "i.id IN (SELECT id FROM ready_issues)"
-		}
-		return "i.id NOT IN (SELECT id FROM ready_issues)"
+		return b.buildReadySQL(e.Value.Bool)
 
 	case "pinned", "is_template":
 		// Nullable boolean columns (INTEGER in SQLite)
@@ -111,10 +106,14 @@ func (b *SQLBuilder) buildCompare(e *CompareExpr) string {
 	}
 
 	// Handle date comparisons
-	// Wrap column in datetime() to normalize ISO 8601 timestamps with timezone
-	// to UTC format that matches datetime('now', ...) expressions
 	if e.Value.Type == ValueDate {
 		dateSQL := b.dateToSQL(e.Value.String)
+		if b.dialect == appbeads.DialectMySQL {
+			// MySQL/Dolt handles datetime types natively, no wrapping needed
+			return fmt.Sprintf("%s %s %s", column, b.opToSQL(e.Op), dateSQL)
+		}
+		// SQLite: wrap column in datetime() to normalize ISO 8601 timestamps
+		// with timezone to UTC format that matches datetime('now', ...) expressions
 		return fmt.Sprintf("datetime(%s) %s %s", column, b.opToSQL(e.Op), dateSQL)
 	}
 
@@ -220,8 +219,16 @@ func (b *SQLBuilder) opToSQL(op TokenType) string {
 	}
 }
 
-// dateToSQL converts a date value to SQL expression.
+// dateToSQL converts a date value to a SQL expression based on the dialect.
 func (b *SQLBuilder) dateToSQL(dateStr string) string {
+	if b.dialect == appbeads.DialectMySQL {
+		return b.dateToSQLMySQL(dateStr)
+	}
+	return b.dateToSQLSQLite(dateStr)
+}
+
+// dateToSQLSQLite generates SQLite date expressions.
+func (b *SQLBuilder) dateToSQLSQLite(dateStr string) string {
 	switch dateStr {
 	case "today":
 		return "date('now')"
@@ -247,6 +254,84 @@ func (b *SQLBuilder) dateToSQL(dateStr string) string {
 		b.params = append(b.params, dateStr)
 		return "?"
 	}
+}
+
+// dateToSQLMySQL generates MySQL/Dolt date expressions.
+func (b *SQLBuilder) dateToSQLMySQL(dateStr string) string {
+	switch dateStr {
+	case "today":
+		return "CURDATE()"
+	case "yesterday":
+		return "DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
+	default:
+		// Handle relative time formats: -Nd (days), -Nh (hours), -Nm (months)
+		if len(dateStr) > 1 && dateStr[0] == '-' {
+			suffix := dateStr[len(dateStr)-1]
+			value := dateStr[1 : len(dateStr)-1] // strip - and suffix
+
+			switch suffix {
+			case 'd', 'D':
+				return fmt.Sprintf("DATE_SUB(CURDATE(), INTERVAL %s DAY)", value)
+			case 'h', 'H':
+				return fmt.Sprintf("DATE_SUB(NOW(), INTERVAL %s HOUR)", value)
+			case 'm', 'M':
+				return fmt.Sprintf("DATE_SUB(CURDATE(), INTERVAL %s MONTH)", value)
+			}
+		}
+		// Assume ISO date, pass through as string
+		b.params = append(b.params, dateStr)
+		return "?"
+	}
+}
+
+// doltBlockedSubquery is the inlined SQL for finding blocked issues in Dolt.
+// This bypasses the blocked_issues view to work around a Dolt server bug where
+// views return stale field index errors after client reconnection.
+const doltBlockedSubquery = `SELECT bi.id FROM issues bi
+WHERE bi.status IN ('open', 'in_progress', 'blocked', 'deferred', 'hooked')
+AND EXISTS (
+  SELECT 1 FROM dependencies d
+  WHERE d.issue_id = bi.id AND d.type = 'blocks'
+  AND EXISTS (
+    SELECT 1 FROM issues blocker
+    WHERE blocker.id = d.depends_on_id
+    AND blocker.status IN ('open', 'in_progress', 'blocked', 'deferred', 'hooked')
+  )
+)`
+
+// buildBlockedSQL returns the SQL fragment for the blocked field.
+// SQLite uses the blocked_issues_cache table; Dolt inlines the view SQL directly.
+func (b *SQLBuilder) buildBlockedSQL(isBlocked bool) string {
+	if b.dialect == appbeads.DialectMySQL {
+		if isBlocked {
+			return "i.id IN (" + doltBlockedSubquery + ")"
+		}
+		return "i.id NOT IN (" + doltBlockedSubquery + ")"
+	}
+	// SQLite: blocked_issues_cache is a table with issue_id column
+	if isBlocked {
+		return "i.id IN (SELECT issue_id FROM blocked_issues_cache)"
+	}
+	return "i.id NOT IN (SELECT issue_id FROM blocked_issues_cache)"
+}
+
+// buildReadySQL returns the SQL fragment for the ready field.
+// SQLite uses the ready_issues view; Dolt inlines the SQL to bypass views.
+func (b *SQLBuilder) buildReadySQL(isReady bool) string {
+	if b.dialect == appbeads.DialectMySQL {
+		readySubquery := `SELECT ri.id FROM issues ri
+WHERE ri.status = 'open'
+AND ri.id NOT IN (` + doltBlockedSubquery + `)`
+		if isReady {
+			return "i.id IN (" + readySubquery + ")"
+		}
+		return "i.id NOT IN (" + readySubquery + ")"
+	}
+	// SQLite: ready_issues view works fine
+	if isReady {
+		return "i.id IN (SELECT id FROM ready_issues)"
+	}
+	return "i.id NOT IN (SELECT id FROM ready_issues)"
 }
 
 // buildOrderBy builds the ORDER BY clause.
