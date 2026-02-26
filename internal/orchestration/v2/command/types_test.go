@@ -859,15 +859,16 @@ func TestIsValidTaskID(t *testing.T) {
 		{"perles-abc1.2", true},
 		{"project-x123", true},
 		{"ms-e52", true},
+		{"a-bc", true},          // single-char prefix
+		{"a-b", true},           // single-char segments
+		{"x-abcdefghijk", true}, // single-char prefix, long suffix
+		{"p-dolt-m78.4", true},  // single-char prefix with subtask
 
 		// Invalid formats
-		{"invalid", false},       // no hyphen
-		{"-abc", false},          // starts with hyphen
-		{"project-", false},      // ends with hyphen
-		{"", false},              // empty
-		{"a-bc", false},          // 2 char suffix (minimum)
-		{"a-b", false},           // suffix too short (1 char, needs 2+)
-		{"x-abcdefghijk", false}, // suffix too long (11 chars, max 10)
+		{"invalid", false},  // no hyphen
+		{"-abc", false},     // starts with hyphen
+		{"project-", false}, // ends with hyphen
+		{"", false},         // empty
 	}
 
 	for _, tt := range tests {

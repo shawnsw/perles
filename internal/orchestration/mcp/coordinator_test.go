@@ -343,13 +343,15 @@ func TestIsValidTaskID(t *testing.T) {
 		{"subtask multi-digit", "perles-abc.123", true},
 		{"long suffix", "perles-abcdefghij", true},
 		{"short prefix", "ms-abc", true},
+		{"single char segments", "a-b", true},
+		{"single char prefix", "p-dolt-m78.4", true},
+		{"single char suffix", "perles-a", true},
 
 		// Invalid formats
 		{"empty", "", false},
 		{"no prefix", "-abc", false},
 		{"no suffix", "perles-", false},
-		{"single char suffix", "perles-a", false},
-		{"too long suffix", "perles-abcdefghijk", true}, // no max length in regex
+		{"long suffix no max", "perles-abcdefghijk", true}, // no max length in regex
 		{"spaces", "perles abc", false},
 		{"shell injection attempt", "perles-abc; rm -rf /", false},
 		{"path traversal", "../etc/passwd", false},

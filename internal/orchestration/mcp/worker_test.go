@@ -660,8 +660,8 @@ func TestValidateAccountabilitySummaryArgs_PathTraversal(t *testing.T) {
 			wantErr: "invalid task_id format",
 		},
 		{
-			name:    "too short suffix",
-			taskID:  "t-a",
+			name:    "no hyphen separator",
+			taskID:  "abc",
 			wantErr: "invalid task_id format",
 		},
 	}
