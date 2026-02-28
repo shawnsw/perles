@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
+
+	"github.com/atotto/clipboard"
 )
 
 // Clipboard defines the interface for clipboard operations.
@@ -22,9 +22,10 @@ type SystemClipboard struct{}
 
 // Copy copies text to the system clipboard.
 // Priority:
-// 1. Local tmux session → use native tools (pbcopy/xclip) directly
+// 1. Local tmux session → use native clipboard tools directly
 // 2. Remote SSH session → use OSC 52 escape sequences
 // 3. GNU screen → use OSC 52 escape sequences
+// 4. Bare local terminal → use native clipboard tools directly
 func (SystemClipboard) Copy(text string) error {
 	if isLocalTmux() {
 		return copyViaNative(text)
@@ -54,22 +55,22 @@ func isGNUScreen() bool {
 	return os.Getenv("STY") != ""
 }
 
-// copyViaOSC52 copies text using OSC 52 escape sequences.
-// When inside tmux, it wraps the sequence in a DCS passthrough.
-func copyViaOSC52(text string) (err error) {
+// buildOSC52Sequence builds an OSC 52 clipboard escape sequence for the given
+// text. When inTmux is true, wraps the sequence in a DCS passthrough.
+func buildOSC52Sequence(text string, inTmux bool) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(text))
 
-	var seq string
-	if os.Getenv("TMUX") != "" {
-		// tmux passthrough: wrap OSC 52 in DCS sequence
-		// \x1bP starts DCS, tmux; identifies passthrough
-		// Inner \x1b is doubled to \x1b\x1b
-		// \x1b\\ ends DCS
-		seq = fmt.Sprintf("\x1bPtmux;\x1b\x1b]52;c;%s\x07\x1b\\", encoded)
-	} else {
-		// Direct OSC 52
-		seq = fmt.Sprintf("\x1b]52;c;%s\x07", encoded)
+	if inTmux {
+		return fmt.Sprintf("\x1bPtmux;\x1b\x1b]52;c;%s\x07\x1b\\", encoded)
 	}
+
+	return fmt.Sprintf("\x1b]52;c;%s\x07", encoded)
+}
+
+// copyViaOSC52 copies text using OSC 52 escape sequences.
+// This path uses /dev/tty and is Unix-only.
+func copyViaOSC52(text string) (err error) {
+	seq := buildOSC52Sequence(text, os.Getenv("TMUX") != "")
 
 	// Write to /dev/tty to bypass any stdout redirection
 	// and work correctly with Bubble Tea's alt-screen mode
@@ -87,34 +88,9 @@ func copyViaOSC52(text string) (err error) {
 	return err
 }
 
-// copyViaNative copies text using native clipboard tools.
 func copyViaNative(text string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	default:
-		cmd = exec.Command("xclip", "-selection", "clipboard")
+	if err := clipboard.WriteAll(text); err != nil {
+		return fmt.Errorf("native clipboard copy: %w", err)
 	}
-
-	pipe, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	if _, err := pipe.Write([]byte(text)); err != nil {
-		return err
-	}
-
-	if err := pipe.Close(); err != nil {
-		return err
-	}
-
-	return cmd.Wait()
+	return nil
 }
