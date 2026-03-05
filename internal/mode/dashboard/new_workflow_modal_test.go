@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beadsdomain "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	domaingit "github.com/zjrosen/perles/internal/git/domain"
 	"github.com/zjrosen/perles/internal/keys"
@@ -20,6 +19,7 @@ import (
 	controlplanemocks "github.com/zjrosen/perles/internal/orchestration/controlplane/mocks"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	registry "github.com/zjrosen/perles/internal/registry/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 )
 
@@ -89,11 +89,11 @@ func createTestRegistryService(t *testing.T) *appreg.RegistryService {
 // The mock is set up to return successful results for epic/task creation.
 func createTestWorkflowCreator(t *testing.T, registryService *appreg.RegistryService) *appreg.WorkflowCreator {
 	t.Helper()
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(mock.Anything, mock.Anything, mock.Anything).
-		Return(beadsdomain.CreateResult{ID: "epic-123"}, nil).Maybe()
+		Return(task.CreateResult{ID: "epic-123"}, nil).Maybe()
 	mockExecutor.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(beadsdomain.CreateResult{ID: "task-456"}, nil).Maybe()
+		Return(task.CreateResult{ID: "task-456"}, nil).Maybe()
 	mockExecutor.EXPECT().AddDependency(mock.Anything, mock.Anything).Return(nil).Maybe()
 	return appreg.NewWorkflowCreator(registryService, mockExecutor, config.TemplatesConfig{})
 }
@@ -1333,7 +1333,7 @@ registry:
 
 func TestNewWorkflowModal_EpicSearchArgument_CreatesCorrectFieldType(t *testing.T) {
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
@@ -1347,7 +1347,7 @@ func TestNewWorkflowModal_EpicSearchArgument_CreatesCorrectFieldType(t *testing.
 
 func TestNewWorkflowModal_EpicSearchArgument_InjectsExecutor(t *testing.T) {
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
@@ -1358,7 +1358,7 @@ func TestNewWorkflowModal_EpicSearchArgument_InjectsExecutor(t *testing.T) {
 func TestNewWorkflowModal_EpicSearchArgument_DefaultDebounce200ms(t *testing.T) {
 	// This test verifies the debounce is set to 200ms by checking the form field config
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 	require.NotNil(t, modal)
@@ -1373,7 +1373,7 @@ func TestNewWorkflowModal_EpicSearchArgument_DefaultDebounce200ms(t *testing.T) 
 
 func TestNewWorkflowModal_EpicSearchArgument_FormSubmissionWithSelectedEpic(t *testing.T) {
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 	// Note: BQL executor is not called during form submission - it's only used during field interaction
 
 	mockCP := newMockControlPlane(t)
@@ -1433,7 +1433,7 @@ registry:
 	registryService, err := appreg.NewRegistryService(registryFS, nil, "")
 	require.NoError(t, err)
 
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
 	// Verify both fields were created
@@ -1452,7 +1452,7 @@ func TestNewWorkflowModal_EpicSearchArgument_MockBQLExecutorVerifiesQueryConstru
 	// This test verifies the BQL executor is properly injected and would be called with correct queries
 	// (The actual query execution happens in formmodal, but we verify the executor is wired up)
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
@@ -1467,7 +1467,7 @@ func TestNewWorkflowModal_EpicSearchArgument_MockBQLExecutorVerifiesQueryConstru
 
 func TestNewWorkflowModal_EpicSearchArgument_FormValuesIncludeSelectedEpicID(t *testing.T) {
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
@@ -1705,7 +1705,7 @@ registry:
 	registryService, err := appreg.NewRegistryService(registryFS, nil, "")
 	require.NoError(t, err)
 
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 
 	// Verify all arguments are recognized
@@ -1735,7 +1735,7 @@ registry:
 // generated for an epic-search argument type has all required settings.
 func TestBuildArgumentFields_EpicSearchFieldConfigIsCorrect(t *testing.T) {
 	registryService := createTestRegistryServiceWithEpicSearch(t)
-	mockBQL := mocks.NewMockBQLExecutor(t)
+	mockBQL := mocks.NewMockQueryExecutor(t)
 
 	modal := NewNewWorkflowModal(registryService, nil, nil, nil, mockBQL, false, "")
 

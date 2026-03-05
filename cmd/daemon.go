@@ -12,8 +12,6 @@ import (
 
 	"github.com/zjrosen/perles/communityworkflows"
 	"github.com/zjrosen/perles/frontend"
-	"github.com/zjrosen/perles/internal/beads/application"
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/config"
 	appgit "github.com/zjrosen/perles/internal/git/application"
 	infragit "github.com/zjrosen/perles/internal/git/infrastructure"
@@ -25,6 +23,7 @@ import (
 	"github.com/zjrosen/perles/internal/paths"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	"github.com/zjrosen/perles/internal/sound"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/templates"
 
 	// Register AI client providers (required for AgentProvider to work)
@@ -36,7 +35,7 @@ import (
 	_ "github.com/zjrosen/perles/internal/orchestration/client/providers/opencode"
 )
 
-// Silence unused import warning - config is used for type reference
+// Silence unused import warning — config is used for type reference in daemonPort/runDaemon
 var _ = config.Config{}
 
 var daemonCmd = &cobra.Command{
@@ -107,8 +106,16 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	cfg.ResolvedBeadsDir = paths.ResolveBeadsDir(dbPath)
 	log.Info(log.CatConfig, "resolved beads dir", "path", cfg.ResolvedBeadsDir)
 
-	// Create beads executor for workflow creation
-	var beadsExec application.IssueExecutor
+	// Create backend using config-driven factory
+	backend, err := newBackend(&cfg, workDir)
+	if err != nil {
+		return fmt.Errorf("creating backend: %w", err)
+	}
+	defer func() { _ = backend.Close() }()
+
+	backendSvc := backend.Services()
+	taskExec := backendSvc.TaskExecutor
+
 	var workflowCreator *appreg.WorkflowCreator
 
 	// Create registry service for template instructions with community and user-defined workflows
@@ -132,14 +139,12 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 		// Continue without registry service - prompts will work but without instructions
 	}
 
-	// Create beads executor for workflow creator
-	beadsExec = infrabeads.NewBDExecutor(workDir, cfg.ResolvedBeadsDir)
 	if registryService != nil {
-		workflowCreator = appreg.NewWorkflowCreator(registryService, beadsExec, cfg.Orchestration.Templates)
+		workflowCreator = appreg.NewWorkflowCreator(registryService, taskExec, cfg.Orchestration.Templates)
 	}
 
 	// Create control plane
-	cp, err := createDaemonControlPlane(&cfg, workDir)
+	cp, err := createDaemonControlPlane(&cfg, workDir, taskExec)
 	if err != nil {
 		return fmt.Errorf("creating control plane: %w", err)
 	}
@@ -208,7 +213,7 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func createDaemonControlPlane(cfg *config.Config, _ string) (controlplane.ControlPlane, error) {
+func createDaemonControlPlane(cfg *config.Config, _ string, taskExec taskpkg.TaskExecutor) (controlplane.ControlPlane, error) {
 	orchConfig := cfg.Orchestration
 
 	// Create workflow registry
@@ -232,6 +237,7 @@ func createDaemonControlPlane(cfg *config.Config, _ string) (controlplane.Contro
 		SessionFactory:   sessionFactory,
 		SoundService:     soundService,
 		BeadsDir:         cfg.ResolvedBeadsDir,
+		TaskExecutor:     taskExec,
 		GitExecutorFactory: func(path string) appgit.GitExecutor {
 			return infragit.NewRealExecutor(path)
 		},

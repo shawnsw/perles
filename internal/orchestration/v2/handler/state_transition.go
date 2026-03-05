@@ -16,13 +16,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/tracing"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
 	"github.com/zjrosen/perles/internal/orchestration/v2/repository"
 	"github.com/zjrosen/perles/internal/orchestration/v2/types"
 	"github.com/zjrosen/perles/internal/sound"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // ===========================================================================
@@ -62,7 +62,7 @@ type ReportCompleteHandler struct {
 	processRepo repository.ProcessRepository
 	taskRepo    repository.TaskRepository
 	queueRepo   repository.QueueRepository
-	bdExecutor  appbeads.IssueExecutor
+	bdExecutor  taskpkg.TaskExecutor
 }
 
 // ReportCompleteHandlerOption configures ReportCompleteHandler.
@@ -70,7 +70,7 @@ type ReportCompleteHandlerOption func(*ReportCompleteHandler)
 
 // WithReportCompleteBDExecutor sets the BD executor for task comments.
 // Note: bdExecutor is required and must not be nil.
-func WithReportCompleteBDExecutor(executor appbeads.IssueExecutor) ReportCompleteHandlerOption {
+func WithReportCompleteBDExecutor(executor taskpkg.TaskExecutor) ReportCompleteHandlerOption {
 	return func(h *ReportCompleteHandler) {
 		h.bdExecutor = executor
 	}
@@ -218,7 +218,7 @@ type ReportVerdictHandler struct {
 	processRepo  repository.ProcessRepository
 	taskRepo     repository.TaskRepository
 	queueRepo    repository.QueueRepository
-	bdExecutor   appbeads.IssueExecutor
+	bdExecutor   taskpkg.TaskExecutor
 	tracer       trace.Tracer
 	soundService sound.SoundService
 }
@@ -228,7 +228,7 @@ type ReportVerdictHandlerOption func(*ReportVerdictHandler)
 
 // WithReportVerdictBDExecutor sets the BD executor for task comments.
 // Note: bdExecutor is required and must not be nil.
-func WithReportVerdictBDExecutor(executor appbeads.IssueExecutor) ReportVerdictHandlerOption {
+func WithReportVerdictBDExecutor(executor taskpkg.TaskExecutor) ReportVerdictHandlerOption {
 	return func(h *ReportVerdictHandler) {
 		h.bdExecutor = executor
 	}

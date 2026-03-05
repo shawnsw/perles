@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/flags"
 	appgit "github.com/zjrosen/perles/internal/git/application"
 	domaingit "github.com/zjrosen/perles/internal/git/domain"
@@ -33,6 +32,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/workflow"
 	"github.com/zjrosen/perles/internal/pubsub"
 	"github.com/zjrosen/perles/internal/sound"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // ErrInvalidState is returned when a workflow is in an invalid state for the operation.
@@ -154,6 +154,11 @@ type SupervisorConfig struct {
 	// BeadsDir is the resolved path to the beads database directory.
 	// When set, spawned processes receive BEADS_DIR environment variable.
 	BeadsDir string
+
+	// TaskExecutor provides write access to the task backend.
+	// Used for syncing orchestration state changes and MCP coordinator tools.
+	// If nil, a beads executor is created from WorkDir/BeadsDir (legacy behavior).
+	TaskExecutor taskpkg.TaskExecutor
 }
 
 // defaultSupervisor is the default implementation of Supervisor.
@@ -168,6 +173,7 @@ type defaultSupervisor struct {
 	sessionFactory        *session.Factory
 	soundService          sound.SoundService
 	beadsDir              string
+	taskExecutor          taskpkg.TaskExecutor
 }
 
 // NewSupervisor creates a new Supervisor with the given configuration.
@@ -210,6 +216,7 @@ func NewSupervisor(cfg SupervisorConfig) (Supervisor, error) {
 		sessionFactory:        cfg.SessionFactory,
 		soundService:          cfg.SoundService,
 		beadsDir:              cfg.BeadsDir,
+		taskExecutor:          cfg.TaskExecutor,
 	}, nil
 }
 
@@ -450,6 +457,7 @@ func (s *defaultSupervisor) AllocateResources(ctx context.Context, inst *Workflo
 		SessionRefNotifier:      sess,
 		SessionMetadataProvider: sess,
 		SoundService:            s.soundService,
+		TaskExecutor:            s.taskExecutor,
 		CommandPersistenceProvider: func() processor.CommandWriter {
 			return sess
 		},
@@ -524,11 +532,10 @@ func (s *defaultSupervisor) AllocateResources(ctx context.Context, inst *Workflo
 	}
 
 	// Create coordinator MCP server with the v2 adapter
-	// Note: BeadsDir is empty here; the v2 infrastructure config handles BEADS_DIR for spawned processes
 	mcpCoordServer := mcp.NewCoordinatorServerWithV2Adapter(
 		workDir,
 		port,
-		infrabeads.NewBDExecutor(workDir, ""),
+		s.taskExecutor,
 		infra.Core.Adapter,
 	)
 

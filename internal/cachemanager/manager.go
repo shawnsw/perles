@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// Flushable is a non-generic interface for flushing a cache.
+// This is useful when the app layer needs to flush caches without knowing
+// the concrete key/value types (e.g. BQL caches parameterized on beads types).
+type Flushable interface {
+	Flush(ctx context.Context) error
+}
+
 type CacheManager[K comparable, V any] interface {
 	Get(ctx context.Context, key K) (V, bool)
 	GetMultiple(ctx context.Context, keys []K) (map[K]V, bool)

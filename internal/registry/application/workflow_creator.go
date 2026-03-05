@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	beads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/registry/domain"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // WorkflowResultDTO is the final output of workflow creation.
@@ -41,12 +41,12 @@ type TaskResultDTO struct {
 // WorkflowCreator handles epic/task creation from workflow DAGs.
 type WorkflowCreator struct {
 	registry        *RegistryService
-	executor        beads.IssueExecutor
+	executor        task.TaskExecutor
 	templatesConfig config.TemplatesConfig
 }
 
 // NewWorkflowCreator creates a new WorkflowCreator with dependency injection.
-func NewWorkflowCreator(registry *RegistryService, executor beads.IssueExecutor, templatesConfig config.TemplatesConfig) *WorkflowCreator {
+func NewWorkflowCreator(registry *RegistryService, executor task.TaskExecutor, templatesConfig config.TemplatesConfig) *WorkflowCreator {
 	return &WorkflowCreator{
 		registry:        registry,
 		executor:        executor,

@@ -8,11 +8,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/board"
 	"github.com/zjrosen/perles/internal/ui/coleditor"
 	"github.com/zjrosen/perles/internal/ui/details"
@@ -66,12 +66,12 @@ type Model struct {
 	errContext  string // Context for the error (e.g., "updating status")
 
 	// Delete operation state
-	pendingDeleteColumn int          // Index of column to delete, -1 if none
-	deleteIssueIDs      []string     // IDs to delete (includes descendants for epics)
-	selectedIssue       *beads.Issue // Issue being deleted
+	pendingDeleteColumn int         // Index of column to delete, -1 if none
+	deleteIssueIDs      []string    // IDs to delete (includes descendants for epics)
+	selectedIssue       *task.Issue // Issue being deleted
 
 	// Edit operation state
-	editingIssue *beads.Issue // Issue being edited (for title/description comparison on save)
+	editingIssue *task.Issue // Issue being edited (for title/description comparison on save)
 
 	// Pending cursor restoration after refresh
 	pendingCursor    *cursorState
@@ -92,7 +92,7 @@ type Model struct {
 func New(services mode.Services) Model {
 	// Create board from views (GetViews returns defaults if none configured)
 	clock := services.Clock
-	boardModel := board.NewFromViews(services.Config.GetViews(), services.Executor, clock).
+	boardModel := board.NewFromViews(services.Config.GetViews(), services.QueryExecutor, clock).
 		SetShowCounts(services.Config.UI.ShowCounts)
 
 	// Get user-defined actions from config (may be nil)
@@ -472,7 +472,7 @@ func (m *Model) rebuildBoard() {
 	currentView := m.board.CurrentViewIndex()
 
 	clock := m.services.Clock
-	m.board = board.NewFromViews(m.services.Config.GetViews(), m.services.Executor, clock).
+	m.board = board.NewFromViews(m.services.Config.GetViews(), m.services.QueryExecutor, clock).
 		SetShowCounts(m.services.Config.UI.ShowCounts).
 		SetSize(m.width, m.boardHeight())
 
@@ -745,7 +745,7 @@ type PostDeleteRefreshMsg struct{}
 
 // OpenEditMenuMsg requests opening the issue editor modal.
 type OpenEditMenuMsg struct {
-	Issue beads.Issue
+	Issue task.Issue
 }
 
 type errMsg struct {
@@ -760,7 +760,7 @@ type clearRefreshIndicatorMsg struct{}
 // issueSavedMsg signals completion of a consolidated issue save.
 type issueSavedMsg struct {
 	issueID string
-	opts    beads.UpdateIssueOptions
+	opts    task.UpdateOptions
 	err     error
 }
 
@@ -778,9 +778,9 @@ type viewMenuRenameMsg struct{}
 
 // Async commands
 
-func (m Model) saveIssueCmd(issueID string, opts beads.UpdateIssueOptions) tea.Cmd {
+func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 	return func() tea.Msg {
-		err := m.services.BeadsExecutor.UpdateIssue(issueID, opts)
+		err := m.services.TaskExecutor.UpdateIssue(issueID, opts)
 		return issueSavedMsg{issueID: issueID, opts: opts, err: err}
 	}
 }

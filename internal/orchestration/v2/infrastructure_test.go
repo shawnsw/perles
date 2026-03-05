@@ -14,6 +14,11 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/workflow"
 )
 
+// createTestTaskExecutor creates a MockTaskExecutor for infrastructure tests.
+func createTestTaskExecutor(t *testing.T) *mocks.MockTaskExecutor {
+	return mocks.NewMockTaskExecutor(t)
+}
+
 // createTestAgentProvider creates an AgentProvider mock for testing.
 func createTestAgentProvider(t *testing.T) client.AgentProvider {
 	mockClient := mocks.NewMockHeadlessClient(t)
@@ -92,7 +97,8 @@ func TestNewInfrastructure(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -163,7 +169,8 @@ func TestInfrastructure_Start(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -189,7 +196,8 @@ func TestInfrastructure_Start(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -212,7 +220,8 @@ func TestInfrastructure_Drain(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -238,7 +247,8 @@ func TestInfrastructure_Drain(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -258,7 +268,8 @@ func TestInfrastructure_Shutdown(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -286,7 +297,8 @@ func TestInfrastructure_Shutdown(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -304,7 +316,8 @@ func TestInfrastructure_Shutdown(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: createTestAgentProvider(t),
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		infra, err := NewInfrastructure(cfg)
@@ -332,7 +345,8 @@ func TestAllHandlersRegistered(t *testing.T) {
 		AgentProviders: client.AgentProviders{
 			client.RoleCoordinator: createTestAgentProvider(t),
 		},
-		WorkDir: "/tmp/test",
+		WorkDir:      "/tmp/test",
+		TaskExecutor: createTestTaskExecutor(t),
 	}
 
 	infra, err := NewInfrastructure(cfg)
@@ -383,7 +397,8 @@ func TestInfrastructure_Integration(t *testing.T) {
 			AgentProviders: client.AgentProviders{
 				client.RoleCoordinator: provider,
 			},
-			WorkDir: "/tmp/test",
+			WorkDir:      "/tmp/test",
+			TaskExecutor: createTestTaskExecutor(t),
 		}
 
 		// Create
@@ -422,6 +437,7 @@ func TestInfrastructure_Integration(t *testing.T) {
 				client.RoleCoordinator: mockProvider,
 			},
 			WorkDir:               "/tmp/test",
+			TaskExecutor:          createTestTaskExecutor(t),
 			WorkflowStateProvider: workflowProvider,
 		}
 

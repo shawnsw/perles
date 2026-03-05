@@ -9,7 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 func TestColumn_NewColumn(t *testing.T) {
@@ -19,7 +19,7 @@ func TestColumn_NewColumn(t *testing.T) {
 
 func TestColumn_SetItems(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -29,7 +29,7 @@ func TestColumn_SetItems(t *testing.T) {
 
 func TestColumn_SetItems_Empty(t *testing.T) {
 	c := NewColumn("Test")
-	c = c.SetItems([]beads.Issue{})
+	c = c.SetItems([]task.Issue{})
 	require.Empty(t, c.Items())
 }
 
@@ -40,7 +40,7 @@ func TestColumn_SelectedItem_Empty(t *testing.T) {
 
 func TestColumn_SelectedItem_WithItems(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -52,7 +52,7 @@ func TestColumn_SelectedItem_WithItems(t *testing.T) {
 
 func TestColumn_SelectByID(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 		{ID: "bd-3", TitleText: "Issue 3"},
@@ -68,7 +68,7 @@ func TestColumn_SelectByID(t *testing.T) {
 
 func TestColumn_SelectByID_NotFound(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{{ID: "bd-1", TitleText: "Issue 1"}}
+	issues := []task.Issue{{ID: "bd-1", TitleText: "Issue 1"}}
 	c = c.SetItems(issues)
 
 	_, found := c.SelectByID("nonexistent")
@@ -105,9 +105,9 @@ func TestColumn_View_Empty(t *testing.T) {
 
 func TestColumn_Title_WithItems(t *testing.T) {
 	c := NewColumn("Ready")
-	issues := []beads.Issue{
-		{ID: "bd-1", TitleText: "Issue 1", Priority: beads.PriorityHigh, Type: beads.TypeTask},
-		{ID: "bd-2", TitleText: "Issue 2", Priority: beads.PriorityMedium, Type: beads.TypeBug},
+	issues := []task.Issue{
+		{ID: "bd-1", TitleText: "Issue 1", Priority: task.PriorityHigh, Type: task.TypeTask},
+		{ID: "bd-2", TitleText: "Issue 2", Priority: task.PriorityMedium, Type: task.TypeBug},
 	}
 	c = c.SetItems(issues)
 	title := c.Title()
@@ -117,9 +117,9 @@ func TestColumn_Title_WithItems(t *testing.T) {
 func TestColumn_View_WithItems(t *testing.T) {
 	c := NewColumn("Ready")
 	c = c.SetSize(50, 20).(Column)
-	issues := []beads.Issue{
-		{ID: "bd-1", TitleText: "Issue 1", Priority: beads.PriorityHigh, Type: beads.TypeTask},
-		{ID: "bd-2", TitleText: "Issue 2", Priority: beads.PriorityMedium, Type: beads.TypeBug},
+	issues := []task.Issue{
+		{ID: "bd-1", TitleText: "Issue 1", Priority: task.PriorityHigh, Type: task.TypeTask},
+		{ID: "bd-2", TitleText: "Issue 2", Priority: task.PriorityMedium, Type: task.TypeBug},
 	}
 	c = c.SetItems(issues)
 	view := c.View()
@@ -138,7 +138,7 @@ func TestColumn_SetShowCounts(t *testing.T) {
 
 func TestColumn_Title_ShowCountsFalse(t *testing.T) {
 	c := NewColumn("Ready")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -151,7 +151,7 @@ func TestColumn_Title_ShowCountsFalse(t *testing.T) {
 
 func TestColumn_Title_ShowCountsTrue(t *testing.T) {
 	c := NewColumn("Ready")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -165,7 +165,7 @@ func TestColumn_Title_ShowCountsTrue(t *testing.T) {
 func TestColumn_Title_ShowCountsDefault(t *testing.T) {
 	// When showCounts is nil (not set), should default to showing counts
 	c := NewColumn("Ready")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 	}
 	c = c.SetItems(issues)
@@ -176,7 +176,7 @@ func TestColumn_Title_ShowCountsDefault(t *testing.T) {
 
 func TestColumn_Update_NavigateDown(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -191,7 +191,7 @@ func TestColumn_Update_NavigateDown(t *testing.T) {
 
 func TestColumn_Update_NavigateUp(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -210,7 +210,7 @@ func TestColumn_Update_NavigateUp(t *testing.T) {
 
 func TestColumn_Items(t *testing.T) {
 	c := NewColumn("Test")
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{ID: "bd-1", TitleText: "Issue 1"},
 		{ID: "bd-2", TitleText: "Issue 2"},
 	}
@@ -231,10 +231,10 @@ func TestColumn_View_Golden(t *testing.T) {
 // TestColumn_View_WithIssues_Golden tests column with sample issues
 func TestColumn_View_WithIssues_Golden(t *testing.T) {
 	c := NewColumn("Ready").SetSize(30, 15).(Column).SetFocused(true).(Column)
-	issues := []beads.Issue{
-		{ID: "bd-1", TitleText: "First Issue", Priority: beads.PriorityHigh, Type: beads.TypeBug},
-		{ID: "bd-2", TitleText: "Second Issue", Priority: beads.PriorityMedium, Type: beads.TypeTask},
-		{ID: "bd-3", TitleText: "Third Issue", Priority: beads.PriorityLow, Type: beads.TypeFeature},
+	issues := []task.Issue{
+		{ID: "bd-1", TitleText: "First Issue", Priority: task.PriorityHigh, Type: task.TypeBug},
+		{ID: "bd-2", TitleText: "Second Issue", Priority: task.PriorityMedium, Type: task.TypeTask},
+		{ID: "bd-3", TitleText: "Third Issue", Priority: task.PriorityLow, Type: task.TypeFeature},
 	}
 	c = c.SetItems(issues)
 	view := zone.Scan(c.View()) // Scan to strip zone markers (matches production behavior)
@@ -310,7 +310,7 @@ func TestColumn_LoadIssuesCmd_NoQuery(t *testing.T) {
 
 func TestColumnLoadedMsg_Structure(t *testing.T) {
 	// Test that ColumnLoadedMsg can be constructed correctly
-	issues := []beads.Issue{{ID: "test-1", TitleText: "Test"}}
+	issues := []task.Issue{{ID: "test-1", TitleText: "Test"}}
 	msg := ColumnLoadedMsg{
 		ColumnTitle: "Ready",
 		Issues:      issues,

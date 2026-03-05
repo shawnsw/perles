@@ -5,9 +5,9 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/colorpicker"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
 
@@ -21,7 +21,7 @@ func TestNew_InitialState(t *testing.T) {
 	cols := []config.ColumnConfig{
 		{Name: "Blocked", Query: "status = open and blocked = true", Color: "#FF0000"},
 	}
-	ed := New(0, cols, nil, false, nil)
+	ed := New(0, cols, nil, nil, false, nil)
 
 	require.Equal(t, ModeEdit, ed.Mode())
 	require.Equal(t, FieldName, ed.Focused())
@@ -31,7 +31,7 @@ func TestNew_InitialState(t *testing.T) {
 
 func TestNewForCreate_DefaultValues(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Existing", Query: "status = open"}}
-	ed := NewForCreate(0, columns, nil, false, nil)
+	ed := NewForCreate(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, ModeNew, ed.Mode())
 	require.Equal(t, 0, ed.InsertAfter())
@@ -42,14 +42,14 @@ func TestNewForCreate_DefaultValues(t *testing.T) {
 
 func TestNewForCreate_FocusOnName(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Existing", Query: "status = open"}}
-	ed := NewForCreate(0, columns, nil, false, nil)
+	ed := NewForCreate(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, FieldName, ed.Focused())
 }
 
 func TestNew_SetsModeEdit(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, ModeEdit, ed.Mode())
 	require.Equal(t, -1, ed.InsertAfter()) // Not used in edit mode
@@ -57,7 +57,7 @@ func TestNew_SetsModeEdit(t *testing.T) {
 
 func TestNavigation_DownMoves(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Initial focus on name field
 	require.Equal(t, FieldName, ed.Focused())
@@ -78,7 +78,7 @@ func TestNavigation_DownMoves(t *testing.T) {
 
 func TestNavigation_UpMoves(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Move down first: Name → Type → Color → Query
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown}) // Name -> Type
@@ -101,7 +101,7 @@ func TestNavigation_UpMoves(t *testing.T) {
 
 func TestNavigation_Wraps(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// At FieldName, press up should wrap to FieldDelete
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyUp})
@@ -114,7 +114,7 @@ func TestNavigation_Wraps(t *testing.T) {
 
 func TestNavigation_JK_OnNonTextFields(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Move to Type field (not a text input)
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -131,7 +131,7 @@ func TestNavigation_JK_OnNonTextFields(t *testing.T) {
 
 func TestNavigation_JK_OnNameField_ShouldType(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Start on FieldName
 	require.Equal(t, FieldName, ed.Focused())
@@ -144,7 +144,7 @@ func TestNavigation_JK_OnNameField_ShouldType(t *testing.T) {
 
 func TestNavigation_CtrlN(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Initial focus on name field
 	require.Equal(t, FieldName, ed.Focused())
@@ -165,7 +165,7 @@ func TestNavigation_CtrlN(t *testing.T) {
 
 func TestNavigation_CtrlP(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Move down first: Name → Type → Color → Query
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown}) // Name -> Type
@@ -186,7 +186,7 @@ func TestNavigation_CtrlP(t *testing.T) {
 
 func TestNewForCreate_NavigationSkipsDelete(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Existing", Query: "status = open"}}
-	ed := NewForCreate(0, columns, nil, false, nil)
+	ed := NewForCreate(0, columns, nil, nil, false, nil)
 
 	// Navigate through all fields - Delete should never be focused
 	visited := make(map[Field]bool)
@@ -204,7 +204,7 @@ func TestCurrentConfig_BuildsCorrectly(t *testing.T) {
 	columns := []config.ColumnConfig{
 		{Name: "Test", Query: "status = open and ready = true", Color: "#FF0000"},
 	}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	cfg := ed.CurrentConfig()
 
@@ -218,12 +218,12 @@ func TestLivePreview_FiltersOnQuery(t *testing.T) {
 		{Name: "Open", Query: "status = open", Color: "#FF0000"},
 	}
 	// Mock executor returns what the BQL query would return
-	executor := mocks.NewMockBQLExecutor(t)
-	executor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "1", Status: beads.StatusOpen},
+	executor := mocks.NewMockQueryExecutor(t)
+	executor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "1", Status: task.StatusOpen},
 	}, nil)
 
-	ed := New(0, columns, executor, false, nil)
+	ed := New(0, columns, executor, nil, false, nil)
 
 	// Preview should show what the executor returned
 	require.Len(t, ed.PreviewIssues(), 1)
@@ -236,7 +236,7 @@ func TestDelete_OpensModal(t *testing.T) {
 		{Name: "Col2", Query: "status = closed"},
 	}
 
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to delete field
 	for ed.Focused() != FieldDelete {
@@ -263,7 +263,7 @@ func TestDeleteModal_ConfirmSendsDeleteMsg(t *testing.T) {
 		{Name: "Col2", Query: "status = closed"},
 	}
 
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to delete field and open modal
 	for ed.Focused() != FieldDelete {
@@ -292,7 +292,7 @@ func TestDeleteModal_CancelReturnsToEditor(t *testing.T) {
 		{Name: "Col2", Query: "status = closed"},
 	}
 
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to delete field and open modal
 	for ed.Focused() != FieldDelete {
@@ -318,7 +318,7 @@ func TestDelete_AllowedForLastColumn(t *testing.T) {
 	// Deleting last column is now allowed - returns to empty state
 	columns := []config.ColumnConfig{{Name: "Only", Query: "status = open"}}
 
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to delete field
 	for ed.Focused() != FieldDelete {
@@ -344,7 +344,7 @@ func TestDelete_AllowedForLastColumn(t *testing.T) {
 
 func TestEnter_ReturnsSaveMsg(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to save field
 	for ed.Focused() != FieldSave {
@@ -363,7 +363,7 @@ func TestEnter_ReturnsSaveMsg(t *testing.T) {
 
 func TestEsc_ReturnsCancelMsg(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	_, cmd := ed.Update(tea.KeyMsg{Type: tea.KeyEscape})
 
@@ -375,7 +375,7 @@ func TestEsc_ReturnsCancelMsg(t *testing.T) {
 
 func TestNewForCreate_ReturnsAddMsg(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Existing", Query: "status = open"}}
-	ed := NewForCreate(2, columns, nil, false, nil) // Insert after index 2
+	ed := NewForCreate(2, columns, nil, nil, false, nil) // Insert after index 2
 
 	// Type a name
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Test Column")})
@@ -397,7 +397,7 @@ func TestNewForCreate_ReturnsAddMsg(t *testing.T) {
 
 func TestSetSize(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	ed = ed.SetSize(100, 50)
 
@@ -410,7 +410,7 @@ func TestView_ContainsFormElements(t *testing.T) {
 	columns := []config.ColumnConfig{
 		{Name: "Ready", Query: "status = open and ready = true", Color: "#73F59F"},
 	}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 	ed = ed.SetSize(100, 40)
 
 	view := ed.View()
@@ -430,7 +430,7 @@ func TestView_ContainsFormElements(t *testing.T) {
 
 func TestValidation_EmptyNameBlocksSave(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to save field
 	for ed.Focused() != FieldSave {
@@ -449,7 +449,7 @@ func TestValidation_EmptyNameBlocksSave(t *testing.T) {
 
 func TestValidation_EmptyQueryBlocksSave(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: ""}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to save field
 	for ed.Focused() != FieldSave {
@@ -468,21 +468,21 @@ func TestValidation_EmptyQueryBlocksSave(t *testing.T) {
 
 func TestColorWarning_InvalidFormat(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "invalid"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.True(t, ed.HasColorWarning())
 }
 
 func TestColorWarning_ValidHex(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.False(t, ed.HasColorWarning())
 }
 
 func TestColorWarning_EmptyIsOk(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: ""}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.False(t, ed.HasColorWarning())
 }
@@ -492,7 +492,7 @@ func TestHorizontalNavigation(t *testing.T) {
 		{Name: "Test1", Query: "status = open"},
 		{Name: "Test2", Query: "status = closed"},
 	}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to Save
 	for ed.Focused() != FieldSave {
@@ -516,12 +516,12 @@ func TestColEditor_View_Golden(t *testing.T) {
 	columns := []config.ColumnConfig{
 		{Name: "Ready", Query: "status = open and ready = true", Color: "#73F59F"},
 	}
-	executor := mocks.NewMockBQLExecutor(t)
-	executor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "bd-1", TitleText: "First task", Status: beads.StatusOpen, Priority: beads.PriorityHigh},
+	executor := mocks.NewMockQueryExecutor(t)
+	executor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "bd-1", TitleText: "First task", Status: task.StatusOpen, Priority: task.PriorityHigh},
 	}, nil)
 
-	ed := New(0, columns, executor, false, nil)
+	ed := New(0, columns, executor, nil, false, nil)
 	ed = ed.SetSize(130, 30)
 
 	view := zone.Scan(ed.View()) // Scan to strip zone markers
@@ -534,12 +534,12 @@ func TestColEditor_View_Golden_Tall(t *testing.T) {
 	columns := []config.ColumnConfig{
 		{Name: "Ready", Query: "status = open and ready = true", Color: "#73F59F"},
 	}
-	executor := mocks.NewMockBQLExecutor(t)
-	executor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "bd-1", TitleText: "First task", Status: beads.StatusOpen, Priority: beads.PriorityHigh},
+	executor := mocks.NewMockQueryExecutor(t)
+	executor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "bd-1", TitleText: "First task", Status: task.StatusOpen, Priority: task.PriorityHigh},
 	}, nil)
 
-	ed := New(0, columns, executor, false, nil)
+	ed := New(0, columns, executor, nil, false, nil)
 	ed = ed.SetSize(130, 51)
 
 	view := zone.Scan(ed.View()) // Scan to strip zone markers
@@ -555,35 +555,35 @@ func TestColEditor_View_Golden_TreePreview(t *testing.T) {
 	}
 
 	// Create mock executor with tree data (epic with child tasks)
-	executor := mocks.NewMockBQLExecutor(t)
-	executor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
+	executor := mocks.NewMockQueryExecutor(t)
+	executor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
 		{
 			ID:        "epic-1",
 			TitleText: "Epic: Implement tree columns",
-			Status:    beads.StatusInProgress,
-			Priority:  beads.PriorityHigh,
-			Type:      beads.TypeEpic,
+			Status:    task.StatusInProgress,
+			Priority:  task.PriorityHigh,
+			Type:      task.TypeEpic,
 			Blocks:    []string{"task-1", "task-2"},
 		},
 		{
 			ID:        "task-1",
 			TitleText: "Add tree column to board",
-			Status:    beads.StatusClosed,
-			Priority:  beads.PriorityMedium,
-			Type:      beads.TypeTask,
+			Status:    task.StatusClosed,
+			Priority:  task.PriorityMedium,
+			Type:      task.TypeTask,
 			BlockedBy: []string{"epic-1"},
 		},
 		{
 			ID:        "task-2",
 			TitleText: "Fix tree width calculation",
-			Status:    beads.StatusOpen,
-			Priority:  beads.PriorityMedium,
-			Type:      beads.TypeTask,
+			Status:    task.StatusOpen,
+			Priority:  task.PriorityMedium,
+			Type:      task.TypeTask,
 			BlockedBy: []string{"epic-1"},
 		},
 	}, nil)
 
-	ed := New(0, columns, executor, false, nil)
+	ed := New(0, columns, executor, nil, false, nil)
 	ed = ed.SetSize(130, 40)
 
 	view := zone.Scan(ed.View()) // Scan to strip zone markers
@@ -593,7 +593,7 @@ func TestColEditor_View_Golden_TreePreview(t *testing.T) {
 
 func TestColorPicker_EnterOpensOverlay(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to FieldColor (Name -> Type -> Color)
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown}) // Name -> Type
@@ -610,7 +610,7 @@ func TestColorPicker_EnterOpensOverlay(t *testing.T) {
 
 func TestColorPicker_SelectMsgUpdatesColor(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 	ed = ed.SetSize(80, 40)
 
 	// Navigate to FieldColor (Name -> Type -> Color) and open picker
@@ -630,7 +630,7 @@ func TestColorPicker_SelectMsgUpdatesColor(t *testing.T) {
 
 func TestColorPicker_CancelMsgClosesWithoutChange(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 	ed = ed.SetSize(80, 40)
 
 	// Navigate to FieldColor (Name -> Type -> Color) and open picker
@@ -649,7 +649,7 @@ func TestColorPicker_CancelMsgClosesWithoutChange(t *testing.T) {
 
 func TestColorPicker_NavigationWhenOpen(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 	ed = ed.SetSize(80, 40)
 
 	// Navigate to FieldColor (Name -> Type -> Color) and open picker
@@ -667,11 +667,11 @@ func TestColorPicker_NavigationWhenOpen(t *testing.T) {
 
 func TestColorPicker_PreviewUpdatesAfterSelection(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open", Color: "#FF0000"}}
-	executor := mocks.NewMockBQLExecutor(t)
-	executor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "1", Status: beads.StatusOpen},
+	executor := mocks.NewMockQueryExecutor(t)
+	executor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "1", Status: task.StatusOpen},
 	}, nil).Maybe()
-	ed := New(0, columns, executor, false, nil)
+	ed := New(0, columns, executor, nil, false, nil)
 	ed = ed.SetSize(80, 40)
 
 	// Navigate to FieldColor and open picker
@@ -688,7 +688,7 @@ func TestColorPicker_PreviewUpdatesAfterSelection(t *testing.T) {
 func TestNewForCreate_EmptyColumns(t *testing.T) {
 	// When creating a column on an empty view, insertAfterIndex is -1
 	columns := []config.ColumnConfig{} // Empty columns
-	ed := NewForCreate(-1, columns, nil, false, nil)
+	ed := NewForCreate(-1, columns, nil, nil, false, nil)
 
 	require.Equal(t, ModeNew, ed.Mode())
 	require.Equal(t, -1, ed.InsertAfter())
@@ -701,14 +701,14 @@ func TestNewForCreate_EmptyColumns(t *testing.T) {
 
 func TestTypeSelector_DefaultIsBQL(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, "bql", ed.ColumnType())
 }
 
 func TestTypeSelector_LoadsFromConfig(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, "tree", ed.ColumnType())
 	require.Equal(t, "perles-123", ed.IssueIDInput().Value())
@@ -716,7 +716,7 @@ func TestTypeSelector_LoadsFromConfig(t *testing.T) {
 
 func TestTypeSelector_ToggleWithRightArrow(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to FieldType
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -736,7 +736,7 @@ func TestTypeSelector_ToggleWithRightArrow(t *testing.T) {
 
 func TestTypeSelector_ToggleWithLeftArrow(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to FieldType
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -756,7 +756,7 @@ func TestTypeSelector_ToggleWithLeftArrow(t *testing.T) {
 
 func TestTypeSelector_NavigationSkipsHiddenFields(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// For tree type: Name -> Type -> Color -> IssueID -> TreeMode -> Save (skips Query)
 	require.Equal(t, FieldName, ed.Focused())
@@ -779,7 +779,7 @@ func TestTypeSelector_NavigationSkipsHiddenFields(t *testing.T) {
 
 func TestTypeSelector_BQLNavigationSkipsIssueID(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// For BQL type: Name -> Type -> Color -> Query -> Save (skips IssueID)
 	require.Equal(t, FieldName, ed.Focused())
@@ -800,7 +800,7 @@ func TestTypeSelector_BQLNavigationSkipsIssueID(t *testing.T) {
 func TestTypeSelector_CurrentConfigIncludesType(t *testing.T) {
 	// Test BQL config
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	cfg := ed.CurrentConfig()
 	require.Equal(t, "bql", cfg.Type)
@@ -809,7 +809,7 @@ func TestTypeSelector_CurrentConfigIncludesType(t *testing.T) {
 
 	// Test tree config with IssueID set
 	treeColumns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-456"}}
-	treeEd := New(0, treeColumns, nil, false, nil)
+	treeEd := New(0, treeColumns, nil, nil, false, nil)
 
 	cfg = treeEd.CurrentConfig()
 	require.Equal(t, "tree", cfg.Type)
@@ -819,7 +819,7 @@ func TestTypeSelector_CurrentConfigIncludesType(t *testing.T) {
 
 func TestTypeSelector_ValidationRequiresIssueIDForTree(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Type: "tree"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 	ed.nameInput.SetValue("Tree Column")
 
 	// IssueID is empty - should fail validation
@@ -837,7 +837,7 @@ func TestTypeSelector_ValidationRequiresIssueIDForTree(t *testing.T) {
 
 func TestTypeSelector_ViewRendersSelector(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Test", Query: "status = open"}}
-	ed := New(0, columns, nil, false, nil).SetSize(80, 40)
+	ed := New(0, columns, nil, nil, false, nil).SetSize(80, 40)
 
 	view := ed.View()
 	require.Contains(t, view, "BQL Query")
@@ -848,7 +848,7 @@ func TestTypeSelector_ViewRendersSelector(t *testing.T) {
 // Integration test: Column editor creates tree column
 func TestNewForCreate_TreeColumn_ReturnsAddMsg(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Existing", Query: "status = open"}}
-	ed := NewForCreate(0, columns, nil, false, nil)
+	ed := NewForCreate(0, columns, nil, nil, false, nil)
 
 	// Type a name
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Dependencies")})
@@ -887,7 +887,7 @@ func TestEdit_TreeColumn_ReturnsSaveMsgWithType(t *testing.T) {
 	columns := []config.ColumnConfig{
 		{Name: "Tree Col", Type: "tree", IssueID: "perles-old"},
 	}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Edit the issue ID
 	// Navigate to IssueID field: Name -> Type -> Color -> IssueID
@@ -922,21 +922,21 @@ func TestEdit_TreeColumn_ReturnsSaveMsgWithType(t *testing.T) {
 
 func TestTreeModeSelector_DefaultIsDeps(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, "deps", ed.TreeMode())
 }
 
 func TestTreeModeSelector_LoadsFromConfig(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123", TreeMode: "child"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	require.Equal(t, "child", ed.TreeMode())
 }
 
 func TestTreeModeSelector_ToggleWithRightArrow(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to TreeMode field: Name -> Type -> Color -> IssueID -> TreeMode
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown}) // Name -> Type
@@ -959,7 +959,7 @@ func TestTreeModeSelector_ToggleWithRightArrow(t *testing.T) {
 
 func TestTreeModeSelector_ToggleWithLeftArrow(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123", TreeMode: "child"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to TreeMode field
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown}) // Name -> Type
@@ -982,7 +982,7 @@ func TestTreeModeSelector_ToggleWithLeftArrow(t *testing.T) {
 
 func TestTreeModeSelector_CurrentConfigIncludesTreeMode(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123", TreeMode: "child"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	cfg := ed.CurrentConfig()
 	require.Equal(t, "child", cfg.TreeMode)
@@ -990,7 +990,7 @@ func TestTreeModeSelector_CurrentConfigIncludesTreeMode(t *testing.T) {
 
 func TestTreeModeSelector_ViewRendersSelector(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil).SetSize(80, 40)
+	ed := New(0, columns, nil, nil, false, nil).SetSize(80, 40)
 
 	view := ed.View()
 	require.Contains(t, view, "Dependencies")
@@ -1000,7 +1000,7 @@ func TestTreeModeSelector_ViewRendersSelector(t *testing.T) {
 
 func TestTreeModeSelector_SaveIncludesTreeMode(t *testing.T) {
 	columns := []config.ColumnConfig{{Name: "Tree", Type: "tree", IssueID: "perles-123"}}
-	ed := New(0, columns, nil, false, nil)
+	ed := New(0, columns, nil, nil, false, nil)
 
 	// Navigate to TreeMode and toggle to children
 	ed, _ = ed.Update(tea.KeyMsg{Type: tea.KeyDown})  // Name -> Type

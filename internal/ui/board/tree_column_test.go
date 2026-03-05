@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/tree"
 )
 
@@ -73,7 +73,7 @@ func TestTreeColumn_HandleLoaded_WrongMessageType(t *testing.T) {
 func TestTreeColumn_HandleLoaded_WrongColumnIndex(t *testing.T) {
 	tc := NewTreeColumn("Deps", "bd-123", "deps", nil, nil)
 	tc = tc.SetColumnIndex(0)
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root"},
 	}
 	msg := TreeColumnLoadedMsg{
@@ -92,7 +92,7 @@ func TestTreeColumn_HandleLoaded_Success(t *testing.T) {
 	tc := NewTreeColumn("Deps", "bd-123", "deps", nil, nil)
 	tc = tc.SetColumnIndex(0)
 
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root Issue", Children: []string{"bd-124"}},
 		"bd-124": {ID: "bd-124", TitleText: "Child Issue", ParentID: "bd-123"},
 	}
@@ -120,7 +120,7 @@ func TestTreeColumn_HandleLoaded_RootNotFound(t *testing.T) {
 		ColumnIndex: 0,
 		ColumnTitle: "Deps",
 		RootID:      "bd-123",
-		IssueMap:    map[string]*beads.Issue{},
+		IssueMap:    map[string]*task.Issue{},
 	}
 
 	result := tc.HandleLoaded(msg)
@@ -222,7 +222,7 @@ func TestTreeColumn_IsEmpty(t *testing.T) {
 	require.True(t, tc.IsEmpty(), "should be empty without tree")
 
 	// Initialize with tree data
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root"},
 	}
 	msg := TreeColumnLoadedMsg{
@@ -246,7 +246,7 @@ func TestTreeColumn_SelectedIssue_WithTree(t *testing.T) {
 	tc := NewTreeColumn("Deps", "bd-123", "deps", nil, nil)
 	tc = tc.SetColumnIndex(0)
 
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root Issue"},
 	}
 	msg := TreeColumnLoadedMsg{
@@ -275,7 +275,7 @@ func TestTreeColumn_Update_Navigation(t *testing.T) {
 	tc = tc.SetColumnIndex(0)
 
 	// Initialize with tree data with multiple nodes
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root", Children: []string{"bd-124"}},
 		"bd-124": {ID: "bd-124", TitleText: "Child", ParentID: "bd-123"},
 	}
@@ -308,8 +308,8 @@ func TestTreeColumn_Update_Navigation(t *testing.T) {
 }
 
 func TestTreeColumnLoadedMsg_Structure(t *testing.T) {
-	issues := []beads.Issue{{ID: "bd-1", TitleText: "Test"}}
-	issueMap := map[string]*beads.Issue{"bd-1": &issues[0]}
+	issues := []task.Issue{{ID: "bd-1", TitleText: "Test"}}
+	issueMap := map[string]*task.Issue{"bd-1": &issues[0]}
 
 	msg := TreeColumnLoadedMsg{
 		ViewIndex:   0,
@@ -334,7 +334,7 @@ func TestTreeColumn_Update_ToggleMode(t *testing.T) {
 	require.Equal(t, tree.ModeDeps, tc.mode)
 
 	// Load tree data first so toggle has something to rebuild
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"bd-123": {ID: "bd-123", TitleText: "Root Issue"},
 	}
 	msg := TreeColumnLoadedMsg{

@@ -7,8 +7,8 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/keys"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/colorpicker"
 	"github.com/zjrosen/perles/internal/ui/shared/vimtextarea"
 
@@ -44,10 +44,10 @@ type CancelMsg struct{}
 
 // epicSearchResultsMsg carries results from an async epic search query.
 type epicSearchResultsMsg struct {
-	fieldIndex int           // Which field this result is for
-	issues     []beads.Issue // Query results
-	err        error         // Query error (nil on success)
-	queryID    int           // Version ID to detect stale results
+	fieldIndex int          // Which field this result is for
+	issues     []task.Issue // Query results
+	err        error        // Query error (nil on success)
+	queryID    int          // Version ID to detect stale results
 }
 
 // epicSearchDebounceMsg triggers execution of a debounced epic search query.

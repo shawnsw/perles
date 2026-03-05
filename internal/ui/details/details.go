@@ -6,10 +6,8 @@ import (
 	"strings"
 	"time"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/keys"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/markdown"
 	"github.com/zjrosen/perles/internal/ui/styles"
 
@@ -38,9 +36,9 @@ func metadataContentWidth() int {
 
 // DependencyItem holds loaded dependency data for display.
 type DependencyItem struct {
-	Issue    *beads.Issue // Full issue data (nil if load failed)
-	ID       string       // Always available (from BlockedBy/Blocks/DiscoveredFrom/Discovered)
-	Category string       // "blocked_by", "blocks", "children", "discovered_from", or "discovered"
+	Issue    *task.Issue // Full issue data (nil if load failed)
+	ID       string      // Always available (from BlockedBy/Blocks/DiscoveredFrom/Discovered)
+	Category string      // "blocked_by", "blocks", "children", "discovered_from", or "discovered"
 }
 
 // Messages emitted by the details view for the app to handle.
@@ -48,7 +46,7 @@ type DependencyItem struct {
 // DeleteIssueMsg requests deletion of the current issue.
 type DeleteIssueMsg struct {
 	IssueID   string
-	IssueType beads.IssueType
+	IssueType task.IssueType
 }
 
 // NavigateToDependencyMsg requests navigation to a dependency's detail view.
@@ -58,7 +56,7 @@ type NavigateToDependencyMsg struct {
 
 // OpenEditMenuMsg requests opening the edit menu.
 type OpenEditMenuMsg struct {
-	Issue beads.Issue
+	Issue task.Issue
 }
 
 // FocusPane represents which pane has focus in the details view.
@@ -71,7 +69,7 @@ const (
 
 // Model holds the detail view state.
 type Model struct {
-	issue              beads.Issue
+	issue              task.Issue
 	viewport           viewport.Model
 	mdRenderer         *markdown.Renderer
 	markdownStyle      string // "dark" or "light"
@@ -81,9 +79,10 @@ type Model struct {
 	focusPane          FocusPane
 	dependencies       []DependencyItem
 	selectedDependency int // Index into dependencies slice
-	executor           bql.BQLExecutor
-	comments           []beads.Comment
-	commentLoader      appbeads.CommentReader
+	executor           task.QueryExecutor
+	queryHelpers       task.QueryHelpers
+	comments           []task.Comment
+	commentLoader      task.TaskReader
 	commentsLoaded     bool
 	commentsError      error
 	hideFooter         bool // When true, footer is not rendered (e.g., in dashboard mode)
@@ -97,11 +96,12 @@ type Model struct {
 // New creates a new detail view.
 // The optional loader parameter enables loading full issue data for dependencies.
 // The optional commentLoader enables loading comments for the issue.
-// Pass *beads.SQLiteClient for both (it implements both interfaces); nil disables loading.
-func New(issue beads.Issue, executor bql.BQLExecutor, commentLoader appbeads.CommentReader) Model {
+// Pass a TaskExecutor (which implements TaskReader) for comment loading; nil disables loading.
+func New(issue task.Issue, executor task.QueryExecutor, queryHelpers task.QueryHelpers, commentLoader task.TaskReader) Model {
 	m := Model{
 		issue:         issue,
 		executor:      executor,
+		queryHelpers:  queryHelpers,
 		commentLoader: commentLoader,
 		markdownStyle: "dark", // Default, will be overridden by SetMarkdownStyle
 	}
@@ -310,7 +310,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 // UpdateStatus updates the displayed status after a change.
-func (m Model) UpdateStatus(status beads.Status) Model {
+func (m Model) UpdateStatus(status task.Status) Model {
 	m.issue.Status = status
 	return m
 }
@@ -322,7 +322,7 @@ func (m Model) UpdateLabels(labels []string) Model {
 }
 
 // UpdatePriority updates the displayed priority after a change.
-func (m Model) UpdatePriority(priority beads.Priority) Model {
+func (m Model) UpdatePriority(priority task.Priority) Model {
 	m.issue.Priority = priority
 	return m
 }
@@ -620,35 +620,6 @@ func (m Model) renderMetadataColumn() string {
 		sb.WriteString("\n")
 	}
 
-	// MolType (if set)
-	if issue.MolType != "" {
-		sb.WriteString(indent)
-		sb.WriteString(labelStyle.Render("Mol Type"))
-		sb.WriteString(valueStyle.Render(issue.MolType))
-		sb.WriteString("\n")
-	}
-
-	// MolType (if set)
-	if issue.RoleType != "" {
-		sb.WriteString(indent)
-		sb.WriteString(labelStyle.Render("Role Type"))
-		sb.WriteString(valueStyle.Render(issue.RoleType))
-		sb.WriteString("\n")
-	}
-
-	if issue.MolType != "" || issue.RoleType != "" {
-		sb.WriteString(indentedDivider)
-		sb.WriteString("\n")
-	}
-
-	// CreatedBy (if set)
-	if issue.CreatedBy != "" {
-		sb.WriteString(indent)
-		sb.WriteString(labelStyle.Render("Creator"))
-		sb.WriteString(valueStyle.Render(issue.CreatedBy))
-		sb.WriteString("\n")
-	}
-
 	// Timestamps
 	sb.WriteString(indent)
 	sb.WriteString(labelStyle.Render("Created"))
@@ -927,41 +898,35 @@ func (m Model) renderFooter() string {
 }
 
 // getTypeStyle returns the style for an issue type.
-func getTypeStyle(t beads.IssueType) lipgloss.Style {
+func getTypeStyle(t task.IssueType) lipgloss.Style {
 	switch t {
-	case beads.TypeBug:
+	case task.TypeBug:
 		return styles.TypeBugStyle
-	case beads.TypeFeature:
+	case task.TypeFeature:
 		return styles.TypeFeatureStyle
-	case beads.TypeTask:
+	case task.TypeTask:
 		return styles.TypeTaskStyle
-	case beads.TypeEpic:
+	case task.TypeEpic:
 		return styles.TypeEpicStyle
-	case beads.TypeChore:
+	case task.TypeChore:
 		return styles.TypeChoreStyle
-	case beads.TypeMolecule:
-		return styles.TypeMoleculeStyle
-	case beads.TypeConvoy:
-		return styles.TypeConvoyStyle
-	case beads.TypeAgent:
-		return styles.TypeAgentStyle
 	default:
 		return lipgloss.NewStyle()
 	}
 }
 
 // getPriorityStyle returns the style for a priority level.
-func getPriorityStyle(p beads.Priority) lipgloss.Style {
+func getPriorityStyle(p task.Priority) lipgloss.Style {
 	switch p {
-	case beads.PriorityCritical:
+	case task.PriorityCritical:
 		return styles.PriorityCriticalStyle
-	case beads.PriorityHigh:
+	case task.PriorityHigh:
 		return styles.PriorityHighStyle
-	case beads.PriorityMedium:
+	case task.PriorityMedium:
 		return styles.PriorityMediumStyle
-	case beads.PriorityLow:
+	case task.PriorityLow:
 		return styles.PriorityLowStyle
-	case beads.PriorityBacklog:
+	case task.PriorityBacklog:
 		return styles.PriorityBacklogStyle
 	default:
 		return lipgloss.NewStyle()
@@ -969,17 +934,17 @@ func getPriorityStyle(p beads.Priority) lipgloss.Style {
 }
 
 // getStatusStyle returns the style for a status value.
-func getStatusStyle(s beads.Status) lipgloss.Style {
+func getStatusStyle(s task.Status) lipgloss.Style {
 	switch s {
-	case beads.StatusOpen:
+	case task.StatusOpen:
 		return lipgloss.NewStyle().Foreground(styles.StatusOpenColor)
-	case beads.StatusInProgress:
+	case task.StatusInProgress:
 		return lipgloss.NewStyle().Foreground(styles.StatusInProgressColor)
-	case beads.StatusClosed:
+	case task.StatusClosed:
 		return lipgloss.NewStyle().Foreground(styles.StatusClosedColor)
-	case beads.StatusDeferred:
+	case task.StatusDeferred:
 		return lipgloss.NewStyle().Foreground(styles.StatusDeferredColor)
-	case beads.StatusBlocked:
+	case task.StatusBlocked:
 		return lipgloss.NewStyle().Foreground(styles.StatusBlockedColor)
 	default:
 		return lipgloss.NewStyle()
@@ -988,18 +953,18 @@ func getStatusStyle(s beads.Status) lipgloss.Style {
 
 // renderStatusIndicator renders the status badge for dependency items.
 // Matches the tree view format: ○ (open), ● (in progress), ✓ (closed), ⏸ (deferred), ⊘ (blocked).
-func renderStatusIndicator(status beads.Status) string {
+func renderStatusIndicator(status task.Status) string {
 	switch status {
-	case beads.StatusClosed:
+	case task.StatusClosed:
 		style := lipgloss.NewStyle().Foreground(styles.StatusClosedColor)
 		return style.Render("✓")
-	case beads.StatusInProgress:
+	case task.StatusInProgress:
 		style := lipgloss.NewStyle().Foreground(styles.StatusInProgressColor)
 		return style.Render("●")
-	case beads.StatusDeferred:
+	case task.StatusDeferred:
 		style := lipgloss.NewStyle().Foreground(styles.StatusDeferredColor)
 		return style.Render("⏸")
-	case beads.StatusBlocked:
+	case task.StatusBlocked:
 		style := lipgloss.NewStyle().Foreground(styles.StatusBlockedColor)
 		return style.Render("⊘")
 	default:
@@ -1009,17 +974,17 @@ func renderStatusIndicator(status beads.Status) string {
 }
 
 // formatStatus returns the display name for a status (Title Case).
-func formatStatus(s beads.Status) string {
+func formatStatus(s task.Status) string {
 	switch s {
-	case beads.StatusOpen:
+	case task.StatusOpen:
 		return "Open"
-	case beads.StatusInProgress:
+	case task.StatusInProgress:
 		return "In Progress"
-	case beads.StatusClosed:
+	case task.StatusClosed:
 		return "Closed"
-	case beads.StatusBlocked:
+	case task.StatusBlocked:
 		return "Blocked"
-	case beads.StatusDeferred:
+	case task.StatusDeferred:
 		return "Deferred"
 	default:
 		return string(s)
@@ -1027,24 +992,18 @@ func formatStatus(s beads.Status) string {
 }
 
 // formatType returns the display name for an issue type (Title Case).
-func formatType(t beads.IssueType) string {
+func formatType(t task.IssueType) string {
 	switch t {
-	case beads.TypeBug:
+	case task.TypeBug:
 		return "Bug"
-	case beads.TypeFeature:
+	case task.TypeFeature:
 		return "Feature"
-	case beads.TypeTask:
+	case task.TypeTask:
 		return "Task"
-	case beads.TypeEpic:
+	case task.TypeEpic:
 		return "Epic"
-	case beads.TypeChore:
+	case task.TypeChore:
 		return "Chore"
-	case beads.TypeMolecule:
-		return "Molecule"
-	case beads.TypeConvoy:
-		return "Convoy"
-	case beads.TypeAgent:
-		return "Agent"
 	default:
 		return string(t)
 	}
@@ -1100,12 +1059,17 @@ func (m *Model) loadDependencies() {
 		ids[i] = item.ID
 	}
 
-	query := bql.BuildIDQuery(ids)
+	if m.queryHelpers == nil {
+		m.dependencies = items
+		return
+	}
+
+	query := m.queryHelpers.BuildIDQuery(ids)
 	if query != "" {
 		issues, err := m.executor.Execute(query)
 		if err == nil {
 			// Build a lookup map
-			issueMap := make(map[string]*beads.Issue)
+			issueMap := make(map[string]*task.Issue)
 			for i := range issues {
 				issueMap[issues[i].ID] = &issues[i]
 			}

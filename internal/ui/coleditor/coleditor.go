@@ -6,11 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/board"
 	"github.com/zjrosen/perles/internal/ui/modals/help"
 	"github.com/zjrosen/perles/internal/ui/shared/colorpicker"
@@ -111,12 +110,15 @@ type Model struct {
 	height int
 
 	// Preview data - actual issues from the column for realistic preview
-	previewIssues []beads.Issue
-	executor      bql.BQLExecutor // BQL executor for preview queries
+	previewIssues []task.Issue
+	executor      task.QueryExecutor // Query executor for preview queries
 
 	// Tree preview for tree column type
-	treeIssueMap map[string]*beads.Issue // Loaded issues for tree preview
-	treeRootID   string                  // Root issue ID for tree preview
+	treeIssueMap map[string]*task.Issue // Loaded issues for tree preview
+	treeRootID   string                 // Root issue ID for tree preview
+
+	// Syntax lexer for query input highlighting (nil disables highlighting)
+	syntaxLexer vimtextarea.SyntaxLexer
 
 	// Validation error message (shown when save attempted with invalid state)
 	validationError string
@@ -126,7 +128,7 @@ type Model struct {
 // executor is used to run BQL queries for live preview.
 // vimEnabled controls whether vim mode is used for BQL query input.
 // clipboard is optional; when provided, yank operations copy to system clipboard.
-func New(columnIndex int, allColumns []config.ColumnConfig, executor bql.BQLExecutor, vimEnabled bool, clipboard shared.Clipboard) Model {
+func New(columnIndex int, allColumns []config.ColumnConfig, executor task.QueryExecutor, syntaxLexer vimtextarea.SyntaxLexer, vimEnabled bool, clipboard shared.Clipboard) Model {
 	cfg := allColumns[columnIndex]
 
 	nameInput := textinput.New()
@@ -162,7 +164,7 @@ func New(columnIndex int, allColumns []config.ColumnConfig, executor bql.BQLExec
 		queryInput = queryInput.SetClipboard(clipboard)
 	}
 	queryInput.SetValue(cfg.Query)
-	queryInput.SetLexer(bql.NewSyntaxLexer())
+	queryInput.SetLexer(syntaxLexer)
 
 	issueIDInput := textinput.New()
 	issueIDInput.SetValue(cfg.IssueID)
@@ -192,6 +194,7 @@ func New(columnIndex int, allColumns []config.ColumnConfig, executor bql.BQLExec
 		colorPicker:     picker,
 		focused:         FieldName,
 		executor:        executor,
+		syntaxLexer:     syntaxLexer,
 		vimEnabled:      vimEnabled,
 	}
 
@@ -204,7 +207,7 @@ func New(columnIndex int, allColumns []config.ColumnConfig, executor bql.BQLExec
 // insertAfterIndex specifies where to insert the new column (to the right of this index).
 // vimEnabled controls whether vim mode is used for BQL query input.
 // clipboard is optional; when provided, yank operations copy to system clipboard.
-func NewForCreate(insertAfterIndex int, allColumns []config.ColumnConfig, executor bql.BQLExecutor, vimEnabled bool, clipboard shared.Clipboard) Model {
+func NewForCreate(insertAfterIndex int, allColumns []config.ColumnConfig, executor task.QueryExecutor, syntaxLexer vimtextarea.SyntaxLexer, vimEnabled bool, clipboard shared.Clipboard) Model {
 	// Default config for new column
 	cfg := config.ColumnConfig{
 		Name:  "",
@@ -235,7 +238,7 @@ func NewForCreate(insertAfterIndex int, allColumns []config.ColumnConfig, execut
 		queryInput = queryInput.SetClipboard(clipboard)
 	}
 	queryInput.SetValue(cfg.Query)
-	queryInput.SetLexer(bql.NewSyntaxLexer())
+	queryInput.SetLexer(syntaxLexer)
 
 	issueIDInput := textinput.New()
 	issueIDInput.SetValue("")
@@ -262,6 +265,7 @@ func NewForCreate(insertAfterIndex int, allColumns []config.ColumnConfig, execut
 		colorPicker:     picker,
 		focused:         FieldName,
 		executor:        executor,
+		syntaxLexer:     syntaxLexer,
 		vimEnabled:      vimEnabled,
 	}
 
@@ -331,7 +335,7 @@ func (m Model) updatePreview() Model {
 		}
 
 		// Build issue map for tree
-		issueMap := make(map[string]*beads.Issue, len(issues))
+		issueMap := make(map[string]*task.Issue, len(issues))
 		for i := range issues {
 			issueMap[issues[i].ID] = &issues[i]
 		}
@@ -1126,7 +1130,7 @@ func (m Model) Focused() Field {
 }
 
 // PreviewIssues returns the preview issues (for testing).
-func (m Model) PreviewIssues() []beads.Issue {
+func (m Model) PreviewIssues() []task.Issue {
 	return m.previewIssues
 }
 

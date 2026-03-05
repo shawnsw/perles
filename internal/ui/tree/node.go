@@ -4,7 +4,7 @@ package tree
 import (
 	"fmt"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // Direction controls tree traversal direction.
@@ -39,7 +39,7 @@ func (d Direction) String() string {
 
 // TreeNode represents a node in the dependency tree.
 type TreeNode struct {
-	Issue    beads.Issue // Issue data
+	Issue    task.Issue  // Issue data
 	Children []*TreeNode // Child nodes in tree
 	Depth    int         // Nesting level (0 = root)
 	Parent   *TreeNode   // Parent node in tree (nil for root)
@@ -54,7 +54,7 @@ type TreeNode struct {
 // Mode determines which relationship types to include:
 //   - ModeDeps: all relationships (parent/child + blocks/blocked-by)
 //   - ModeChildren: only parent-child hierarchy
-func BuildTree(issueMap map[string]*beads.Issue, rootID string, dir Direction, mode TreeMode) (*TreeNode, error) {
+func BuildTree(issueMap map[string]*task.Issue, rootID string, dir Direction, mode TreeMode) (*TreeNode, error) {
 	rootIssue, ok := issueMap[rootID]
 	if !ok {
 		return nil, fmt.Errorf("root issue %s not found", rootID)
@@ -65,8 +65,8 @@ func BuildTree(issueMap map[string]*beads.Issue, rootID string, dir Direction, m
 }
 
 func buildNode(
-	issue *beads.Issue,
-	issueMap map[string]*beads.Issue,
+	issue *task.Issue,
+	issueMap map[string]*task.Issue,
 	dir Direction,
 	mode TreeMode,
 	depth int,
@@ -132,7 +132,7 @@ func buildNode(
 // For down direction: issues that block others come first.
 // For up direction: issues that are blocked by others come first.
 // This ensures proper tree structure where blocked issues appear as descendants of their blockers.
-func sortByBlockOrder(ids []string, issueMap map[string]*beads.Issue, dir Direction) []string {
+func sortByBlockOrder(ids []string, issueMap map[string]*task.Issue, dir Direction) []string {
 	if len(ids) <= 1 {
 		return ids
 	}
@@ -237,7 +237,7 @@ func (n *TreeNode) Flatten() []*TreeNode {
 // CalculateProgress returns the count of closed issues and total issues
 // in this subtree (including this node).
 func (n *TreeNode) CalculateProgress() (closed, total int) {
-	if n.Issue.Status == beads.StatusClosed {
+	if n.Issue.Status == task.StatusClosed {
 		closed++
 	}
 	total++

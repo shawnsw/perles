@@ -3,12 +3,12 @@ package board
 import (
 	"fmt"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // IssueItem wraps an Issue to implement the bubbles list.Item interface.
 type IssueItem struct {
-	*beads.Issue
+	*task.Issue
 }
 
 // Title returns the display title for the list item.

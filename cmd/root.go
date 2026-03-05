@@ -13,15 +13,12 @@ import (
 
 	"github.com/zjrosen/perles/communityworkflows"
 	"github.com/zjrosen/perles/internal/app"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
-	"github.com/zjrosen/perles/internal/bql"
-	"github.com/zjrosen/perles/internal/cachemanager"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/paths"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/templates"
 	"github.com/zjrosen/perles/internal/ui/nobeads"
 	"github.com/zjrosen/perles/internal/ui/outdated"
@@ -237,27 +234,24 @@ func runApp(cmd *cobra.Command, args []string) error {
 	cfg.ResolvedBeadsDir = paths.ResolveBeadsDir(dbPath)
 	log.Info(log.CatConfig, "resolved beads dir", "path", cfg.ResolvedBeadsDir)
 
-	client, err := infrabeads.NewClient(cfg.ResolvedBeadsDir)
+	backend, err := newBackend(&cfg, workDir)
 	if err != nil {
-		// If metadata says dolt+server, the failure is a connection issue, not a missing .beads dir.
-		if meta, metaErr := infrabeads.LoadMetadata(cfg.ResolvedBeadsDir); metaErr == nil && meta.IsDoltServer() {
-			return serverNotStarted(meta.GetDoltServerHost(), meta.GetDoltServerPortWithDir(cfg.ResolvedBeadsDir))
+		var serverDown *task.ServerDownError
+		if errors.As(err, &serverDown) {
+			return serverNotStarted(serverDown.Host, serverDown.Port)
 		}
 		return runNoBeadsMode()
 	}
-	defer func() { _ = client.Close() }()
+	defer func() { _ = backend.Close() }()
 
-	// Version check - query bd_version from database metadata table
-	currentVersion, err := client.Version()
-	if err != nil {
-		// Very old database without bd_version metadata - show outdated view
-		log.Debug(log.CatBeads, "Version check failed", "error", err)
-		return runOutdatedMode("unknown", beads.MinBeadsVersion)
-	}
-
-	log.Debug(log.CatBeads, "Beads Database Version", "version", currentVersion, "minRequiredVersion", beads.MinBeadsVersion)
-	if err := beads.CheckVersion(currentVersion); err != nil {
-		return runOutdatedMode(currentVersion, beads.MinBeadsVersion)
+	// Verify the backend data store is compatible with this version of perles
+	if err := backend.CheckCompatibility(); err != nil {
+		var versionErr *task.VersionIncompatibleError
+		if errors.As(err, &versionErr) {
+			log.Debug(log.CatBeads, "Version incompatible", "current", versionErr.Current, "required", versionErr.Required)
+			return runOutdatedMode(versionErr.Current, versionErr.Required)
+		}
+		return fmt.Errorf("compatibility check: %w", err)
 	}
 
 	// Handle --no-auto-refresh flag (negated logic)
@@ -272,30 +266,15 @@ func runApp(cmd *cobra.Command, args []string) error {
 		configFilePath = ".perles/config.yaml"
 	}
 
-	// Initialize BQL cache managers
-	bqlCache := cachemanager.NewInMemoryCacheManager[string, []beads.Issue](
-		"bql-cache",
-		cachemanager.DefaultExpiration,
-		cachemanager.DefaultCleanupInterval,
-	)
-	depGraphCache := cachemanager.NewInMemoryCacheManager[string, *bql.DependencyGraph](
-		"bql-dep-cache",
-		cachemanager.DefaultExpiration,
-		cachemanager.DefaultCleanupInterval,
-	)
-
-	// Pass config to app with database and config paths (debug for log overlay)
-	model, err := app.NewWithConfig(
-		client,
-		cfg,
-		bqlCache,
-		depGraphCache,
-		client.DBPath(),
-		configFilePath,
-		workDir,
-		debug,
-		registryService,
-	)
+	// Pass config to app with the fully-wired backend
+	model, err := app.NewWithConfig(app.AppConfig{
+		Cfg:             cfg,
+		Backend:         backend,
+		ConfigPath:      configFilePath,
+		WorkDir:         workDir,
+		DebugMode:       debug,
+		RegistryService: registryService,
+	})
 	if err != nil {
 		return fmt.Errorf("initializing application: %w", err)
 	}

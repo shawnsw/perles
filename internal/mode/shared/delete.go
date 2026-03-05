@@ -6,15 +6,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
 	"github.com/zjrosen/perles/internal/ui/styles"
 )
 
 // GetAllDescendants returns all descendant issues for an epic using BQL expand.
 // The returned slice includes the root issue as the first element.
-func GetAllDescendants(loader bql.BQLExecutor, rootID string) []beads.Issue {
+func GetAllDescendants(loader task.QueryExecutor, rootID string) []task.Issue {
 	query := fmt.Sprintf(`id = "%s" expand down depth *`, rootID)
 	issues, err := loader.Execute(query)
 	if err != nil {
@@ -25,9 +24,9 @@ func GetAllDescendants(loader bql.BQLExecutor, rootID string) []beads.Issue {
 
 // CreateDeleteModal creates a confirmation modal for issue deletion.
 // Returns the modal and a slice of all issue IDs to delete (including descendants for epics).
-func CreateDeleteModal(issue *beads.Issue, loader bql.BQLExecutor) (modal.Model, []string) {
+func CreateDeleteModal(issue *task.Issue, loader task.QueryExecutor) (modal.Model, []string) {
 	// Check if this is an epic with child issues
-	hasChildren := issue.Type == beads.TypeEpic && len(issue.Children) > 0
+	hasChildren := issue.Type == task.TypeEpic && len(issue.Children) > 0
 
 	if hasChildren {
 		// Get ALL descendants using BQL expand (not just immediate children)

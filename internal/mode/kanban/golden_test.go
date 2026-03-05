@@ -9,11 +9,11 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/mock"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/board"
 )
 
@@ -34,13 +34,13 @@ func createGoldenTestModel(t *testing.T) Model {
 	clock := mocks.NewMockClock(t)
 	clock.EXPECT().Now().Return(testNow).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	services := mode.Services{
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Clock:     clock,
-		Executor:  mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		Clock:         clock,
+		QueryExecutor: mockExecutor,
 	}
 
 	m := Model{
@@ -55,20 +55,20 @@ func createGoldenTestModel(t *testing.T) Model {
 }
 
 // createGoldenTestModelWithBoard creates a Model with a populated board for golden tests.
-func createGoldenTestModelWithBoard(t *testing.T) (Model, *mocks.MockBQLExecutor) {
+func createGoldenTestModelWithBoard(t *testing.T) (Model, *mocks.MockQueryExecutor) {
 	cfg := config.Defaults()
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
 	clock := mocks.NewMockClock(t)
 	clock.EXPECT().Now().Return(testNow).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	services := mode.Services{
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Clock:     clock,
-		Executor:  mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		Clock:         clock,
+		QueryExecutor: mockExecutor,
 	}
 
 	// Create board with a column containing issues
@@ -81,8 +81,8 @@ func createGoldenTestModelWithBoard(t *testing.T) (Model, *mocks.MockBQLExecutor
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Open",
-		Issues: []beads.Issue{
-			{ID: "task-123", TitleText: "Regular task to delete", Type: beads.TypeTask, Priority: 2, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: "task-123", TitleText: "Regular task to delete", Type: task.TypeTask, Priority: 2, Status: task.StatusOpen},
 		},
 		Err: nil,
 	})
@@ -108,16 +108,16 @@ func TestKanban_Golden_DeleteModal_RegularIssue(t *testing.T) {
 	m = m.SetSize(100, 30)
 
 	// Create a regular task issue
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "task-456",
 		TitleText: "Bug fix: handle null pointer",
-		Type:      beads.TypeTask,
+		Type:      task.TypeTask,
 		Priority:  1,
-		Status:    beads.StatusOpen,
+		Status:    task.StatusOpen,
 	}
 
 	// Create delete modal for regular issue (no executor needed for non-epic)
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	m.modal, m.deleteIssueIDs = shared.CreateDeleteModal(issue, mockExecutor)
 	m.modal.SetSize(m.width, m.height)
 	m.selectedIssue = issue
@@ -143,22 +143,22 @@ func TestKanban_Golden_DeleteModal_EpicWithDescendants(t *testing.T) {
 	m = m.SetSize(100, 40)
 
 	// Create an epic with children
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Major refactoring project",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Priority:  1,
-		Status:    beads.StatusInProgress,
+		Status:    task.StatusInProgress,
 		Children:  []string{"task-1", "task-2", "task-3"},
 	}
 
 	// Mock executor to return descendants when expanding epic
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic, TitleText: "Major refactoring project", Priority: 1},
-		{ID: "task-1", Type: beads.TypeTask, TitleText: "Refactor database layer", Priority: 2},
-		{ID: "task-2", Type: beads.TypeBug, TitleText: "Fix migration script", Priority: 0},
-		{ID: "task-3", Type: beads.TypeFeature, TitleText: "Add new API endpoint", Priority: 1},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic, TitleText: "Major refactoring project", Priority: 1},
+		{ID: "task-1", Type: task.TypeTask, TitleText: "Refactor database layer", Priority: 2},
+		{ID: "task-2", Type: task.TypeBug, TitleText: "Fix migration script", Priority: 0},
+		{ID: "task-3", Type: task.TypeFeature, TitleText: "Add new API endpoint", Priority: 1},
 	}, nil)
 
 	// Create delete modal for epic (shows descendants)

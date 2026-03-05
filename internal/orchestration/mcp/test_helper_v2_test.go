@@ -147,7 +147,7 @@ func NewTestCoordinatorServer(t *testing.T) *TestCoordinatorServerWrapper {
 	cs := NewCoordinatorServer(
 		"/tmp/test",
 		8765,
-		mocks.NewMockIssueExecutor(t),
+		mocks.NewMockTaskExecutor(t),
 	)
 
 	// Create shared worker repository

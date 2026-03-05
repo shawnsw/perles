@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mocks"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 func TestGetAllDescendants_NoChildren(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic},
 	}, nil)
 
 	result := GetAllDescendants(mockExecutor, "epic-1")
@@ -24,11 +24,11 @@ func TestGetAllDescendants_NoChildren(t *testing.T) {
 }
 
 func TestGetAllDescendants_WithChildren(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic},
-		{ID: "task-1", Type: beads.TypeTask},
-		{ID: "task-2", Type: beads.TypeTask},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic},
+		{ID: "task-1", Type: task.TypeTask},
+		{ID: "task-2", Type: task.TypeTask},
 	}, nil)
 
 	result := GetAllDescendants(mockExecutor, "epic-1")
@@ -44,13 +44,13 @@ func TestGetAllDescendants_WithChildren(t *testing.T) {
 }
 
 func TestGetAllDescendants_NestedChildren(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic},
-		{ID: "sub-epic-1", Type: beads.TypeEpic},
-		{ID: "task-1", Type: beads.TypeTask},
-		{ID: "task-2", Type: beads.TypeTask},
-		{ID: "grandchild-1", Type: beads.TypeTask},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic},
+		{ID: "sub-epic-1", Type: task.TypeEpic},
+		{ID: "task-1", Type: task.TypeTask},
+		{ID: "task-2", Type: task.TypeTask},
+		{ID: "grandchild-1", Type: task.TypeTask},
 	}, nil)
 
 	result := GetAllDescendants(mockExecutor, "epic-1")
@@ -68,7 +68,7 @@ func TestGetAllDescendants_NestedChildren(t *testing.T) {
 }
 
 func TestGetAllDescendants_BQLError(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	mockExecutor.EXPECT().Execute(mock.Anything).Return(nil, errors.New("BQL query failed"))
 
 	result := GetAllDescendants(mockExecutor, "epic-1")
@@ -77,8 +77,8 @@ func TestGetAllDescendants_BQLError(t *testing.T) {
 }
 
 func TestGetAllDescendants_EmptyBQLResult(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil)
 
 	result := GetAllDescendants(mockExecutor, "epic-1")
 
@@ -86,13 +86,13 @@ func TestGetAllDescendants_EmptyBQLResult(t *testing.T) {
 }
 
 func TestCreateDeleteModal_RegularIssue_ReturnsCorrectIDs(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	// No expectations needed - Execute won't be called for non-epic
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "task-1",
 		TitleText: "Test Task",
-		Type:      beads.TypeTask,
+		Type:      task.TypeTask,
 	}
 
 	modal, issueIDs := CreateDeleteModal(issue, mockExecutor)
@@ -102,17 +102,17 @@ func TestCreateDeleteModal_RegularIssue_ReturnsCorrectIDs(t *testing.T) {
 }
 
 func TestCreateDeleteModal_EpicWithChildren_ReturnsAllDescendants(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic, TitleText: "Root Epic"},
-		{ID: "task-1", Type: beads.TypeTask, TitleText: "Child Task 1"},
-		{ID: "task-2", Type: beads.TypeTask, TitleText: "Child Task 2"},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic, TitleText: "Root Epic"},
+		{ID: "task-1", Type: task.TypeTask, TitleText: "Child Task 1"},
+		{ID: "task-2", Type: task.TypeTask, TitleText: "Child Task 2"},
 	}, nil)
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Root Epic",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Children:  []string{"task-1", "task-2"},
 	}
 
@@ -126,18 +126,18 @@ func TestCreateDeleteModal_EpicWithChildren_ReturnsAllDescendants(t *testing.T) 
 }
 
 func TestCreateDeleteModal_EpicWithNestedChildren_ReturnsAllDescendants(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic, TitleText: "Root Epic"},
-		{ID: "sub-epic-1", Type: beads.TypeEpic, TitleText: "Sub Epic"},
-		{ID: "task-1", Type: beads.TypeTask, TitleText: "Child Task"},
-		{ID: "grandchild-1", Type: beads.TypeTask, TitleText: "Grandchild Task"},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic, TitleText: "Root Epic"},
+		{ID: "sub-epic-1", Type: task.TypeEpic, TitleText: "Sub Epic"},
+		{ID: "task-1", Type: task.TypeTask, TitleText: "Child Task"},
+		{ID: "grandchild-1", Type: task.TypeTask, TitleText: "Grandchild Task"},
 	}, nil)
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Root Epic",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Children:  []string{"sub-epic-1", "task-1"}, // Immediate children
 	}
 
@@ -152,13 +152,13 @@ func TestCreateDeleteModal_EpicWithNestedChildren_ReturnsAllDescendants(t *testi
 }
 
 func TestCreateDeleteModal_EpicWithoutChildren_NotCascade(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	// No expectations needed - Execute won't be called for epic without children
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Empty Epic",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Children:  []string{}, // No children
 	}
 

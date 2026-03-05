@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/styles"
 
 	"github.com/charmbracelet/lipgloss"
@@ -29,7 +29,7 @@ type Config struct {
 // RenderBadge returns the issue badge without the title: [T][Pn][id]
 // When the issue is pinned, prepends 📌: 📌[T][Pn][id]
 // This is useful when callers need to add their own metadata after the badge.
-func RenderBadge(issue beads.Issue) string {
+func RenderBadge(issue task.Issue) string {
 	priorityText := fmt.Sprintf("[P%d]", issue.Priority)
 	typeText := styles.GetTypeIndicator(issue.Type)
 	issueID := fmt.Sprintf("[%s]", issue.ID)
@@ -40,8 +40,8 @@ func RenderBadge(issue beads.Issue) string {
 
 	var parts []string
 
-	// Add pin indicator if issue is pinned
-	if issue.Pinned != nil && *issue.Pinned {
+	// Add pin indicator if issue is pinned (stored in extensions by beads adapter)
+	if pinned, ok := issue.Extensions["pinned"].(bool); ok && pinned {
 		parts = append(parts, "📌")
 	}
 
@@ -56,7 +56,7 @@ func RenderBadge(issue beads.Issue) string {
 
 // Render returns the full issue line with badge and title.
 // Format: [selection][T][Pn][id] title
-func Render(issue beads.Issue, cfg Config) string {
+func Render(issue task.Issue, cfg Config) string {
 	badge := RenderBadge(issue)
 	title := issue.TitleText
 

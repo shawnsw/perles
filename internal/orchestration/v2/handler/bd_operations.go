@@ -7,11 +7,10 @@ import (
 	"context"
 	"fmt"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
 	"github.com/zjrosen/perles/internal/orchestration/v2/repository"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // ===========================================================================
@@ -23,7 +22,7 @@ import (
 // It also deletes the in-memory task assignment and resets associated worker processes
 // (implementer and reviewer) back to idle phase so they can accept new tasks.
 type MarkTaskCompleteHandler struct {
-	bdExecutor  appbeads.IssueExecutor
+	bdExecutor  taskpkg.TaskExecutor
 	taskRepo    repository.TaskRepository
 	processRepo repository.ProcessRepository
 }
@@ -43,7 +42,7 @@ func WithMarkTaskCompleteProcessRepo(processRepo repository.ProcessRepository) M
 // Panics if bdExecutor is nil.
 // taskRepo can be nil for backward compatibility (graceful degradation).
 // Use WithMarkTaskCompleteProcessRepo to enable worker state reset on task completion.
-func NewMarkTaskCompleteHandler(bdExecutor appbeads.IssueExecutor, taskRepo repository.TaskRepository, opts ...MarkTaskCompleteHandlerOption) *MarkTaskCompleteHandler {
+func NewMarkTaskCompleteHandler(bdExecutor taskpkg.TaskExecutor, taskRepo repository.TaskRepository, opts ...MarkTaskCompleteHandlerOption) *MarkTaskCompleteHandler {
 	if bdExecutor == nil {
 		panic("bdExecutor is required for MarkTaskCompleteHandler")
 	}
@@ -65,7 +64,7 @@ func (h *MarkTaskCompleteHandler) Handle(ctx context.Context, cmd command.Comman
 	markCmd := cmd.(*command.MarkTaskCompleteCommand)
 
 	// 1. Update task status to closed
-	if err := h.bdExecutor.UpdateStatus(markCmd.TaskID, beads.StatusClosed); err != nil {
+	if err := h.bdExecutor.UpdateStatus(markCmd.TaskID, taskpkg.StatusClosed); err != nil {
 		return nil, fmt.Errorf("failed to update BD task status: %w", err)
 	}
 
@@ -162,12 +161,12 @@ type MarkTaskCompleteResult struct {
 // MarkTaskFailedHandler handles CmdMarkTaskFailed commands.
 // It adds a failure comment to the BD task with the provided reason.
 type MarkTaskFailedHandler struct {
-	bdExecutor appbeads.IssueExecutor
+	bdExecutor taskpkg.TaskExecutor
 }
 
 // NewMarkTaskFailedHandler creates a new MarkTaskFailedHandler.
 // Panics if bdExecutor is nil.
-func NewMarkTaskFailedHandler(bdExecutor appbeads.IssueExecutor) *MarkTaskFailedHandler {
+func NewMarkTaskFailedHandler(bdExecutor taskpkg.TaskExecutor) *MarkTaskFailedHandler {
 	if bdExecutor == nil {
 		panic("bdExecutor is required for MarkTaskFailedHandler")
 	}

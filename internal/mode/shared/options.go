@@ -1,7 +1,7 @@
 package shared
 
 import (
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/picker"
 	"github.com/zjrosen/perles/internal/ui/styles"
 )
@@ -20,10 +20,10 @@ func PriorityOptions() []picker.Option {
 // StatusOptions returns picker options for status values.
 func StatusOptions() []picker.Option {
 	return []picker.Option{
-		{Label: "Open", Value: string(beads.StatusOpen), Color: styles.StatusOpenColor},
-		{Label: "In Progress", Value: string(beads.StatusInProgress), Color: styles.StatusInProgressColor},
-		{Label: "Closed", Value: string(beads.StatusClosed), Color: styles.StatusClosedColor},
-		{Label: "Deferred", Value: string(beads.StatusDeferred), Color: styles.StatusDeferredColor},
-		{Label: "Blocked", Value: string(beads.StatusBlocked), Color: styles.StatusBlockedColor},
+		{Label: "Open", Value: string(task.StatusOpen), Color: styles.StatusOpenColor},
+		{Label: "In Progress", Value: string(task.StatusInProgress), Color: styles.StatusInProgressColor},
+		{Label: "Closed", Value: string(task.StatusClosed), Color: styles.StatusClosedColor},
+		{Label: "Deferred", Value: string(task.StatusDeferred), Color: styles.StatusDeferredColor},
+		{Label: "Blocked", Value: string(task.StatusBlocked), Color: styles.StatusBlockedColor},
 	}
 }

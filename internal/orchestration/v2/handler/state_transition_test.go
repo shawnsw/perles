@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
@@ -136,7 +136,7 @@ func TestReportCompleteHandler_TransitionsToAwaitingReview(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0) // 0 = unlimited
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Implementation complete: Implemented feature X").Return(nil)
 
 	// Add implementing worker
@@ -182,7 +182,7 @@ func TestReportCompleteHandler_FailsIfNotImplementingPhase(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	// Add worker in wrong phase
 	worker := &repository.Process{
@@ -208,7 +208,7 @@ func TestReportCompleteHandler_SetsWorkerToReady(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-1",
@@ -243,7 +243,7 @@ func TestReportCompleteHandler_CreatesDeliverQueuedIfQueueNonEmpty(t *testing.T)
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-1",
@@ -287,7 +287,7 @@ func TestReportCompleteHandler_NoFollowUpIfQueueEmpty(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-1",
@@ -322,7 +322,7 @@ func TestReportCompleteHandler_FailsIfWorkerNotFound(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	handler := NewReportCompleteHandler(processRepo, taskRepo, queueRepo, WithReportCompleteBDExecutor(bdExecutor))
 
@@ -337,7 +337,7 @@ func TestReportCompleteHandler_FailsIfNoTaskAssigned(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-1",
@@ -362,7 +362,7 @@ func TestReportCompleteHandler_EmitsStatusChangeEvent(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-1",
@@ -404,7 +404,7 @@ func TestReportCompleteHandler_WorksFromAddressingFeedback(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Implementation complete: Fixed issues").Return(nil)
 
 	// Worker addressing feedback can also report complete
@@ -447,7 +447,7 @@ func TestReportVerdictHandler_ApprovedTransitionsCorrectly(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review APPROVED by worker-2").Return(nil)
 
 	// Add implementer
@@ -506,7 +506,7 @@ func TestReportVerdictHandler_DeniedTransitionsImplementerToAddressingFeedback(t
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review DENIED by worker-2: Needs error handling").Return(nil)
 
 	// Add implementer
@@ -568,7 +568,7 @@ func TestReportVerdictHandler_FailsForInvalidVerdict(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	worker := &repository.Process{
 		ID:        "worker-2",
@@ -594,7 +594,7 @@ func TestReportVerdictHandler_EmitsEventsForBothWorkers(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review DENIED by worker-2: Needs work").Return(nil)
 
 	implementer := &repository.Process{
@@ -779,7 +779,7 @@ func TestFullImplementReviewApproveCycle(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock AddComment for ReportComplete and ReportVerdict calls
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -849,7 +849,7 @@ func TestImplementReviewDenyAddressReviewCycle(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock AddComment for multiple ReportComplete and ReportVerdict calls
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -956,7 +956,7 @@ func TestReportComplete_RaceWithNewMessage(t *testing.T) {
 			processRepo := repository.NewMemoryProcessRepository()
 			taskRepo := repository.NewMemoryTaskRepository()
 			queueRepo := repository.NewMemoryQueueRepository(0)
-			bdExecutor := mocks.NewMockIssueExecutor(t)
+			bdExecutor := mocks.NewMockTaskExecutor(t)
 			// Mock AddComment for ReportComplete with summary
 			bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -1029,13 +1029,13 @@ func TestReportVerdict_RaceWithNewTask(t *testing.T) {
 			processRepo := repository.NewMemoryProcessRepository()
 			taskRepo := repository.NewMemoryTaskRepository()
 			queueRepo := repository.NewMemoryQueueRepository(0)
-			bdExecutor := mocks.NewMockIssueExecutor(t)
+			bdExecutor := mocks.NewMockTaskExecutor(t)
 			// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-			bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-xyz9.1", Status: beads.StatusOpen}, nil).Maybe()
+			bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-xyz9.1", Status: taskpkg.StatusOpen}, nil).Maybe()
 			bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			// Create a separate mock for verdict handler
-			verdictBDExecutor := mocks.NewMockIssueExecutor(t)
+			verdictBDExecutor := mocks.NewMockTaskExecutor(t)
 			verdictBDExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 			// Setup: reviewer about to finish reviewing
@@ -1165,7 +1165,7 @@ func TestReportComplete_RaceWithRetire(t *testing.T) {
 			processRepo := repository.NewMemoryProcessRepository()
 			taskRepo := repository.NewMemoryTaskRepository()
 			queueRepo := repository.NewMemoryQueueRepository(0)
-			bdExecutor := mocks.NewMockIssueExecutor(t)
+			bdExecutor := mocks.NewMockTaskExecutor(t)
 			// Mock AddComment for ReportComplete with summary
 			bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -1240,7 +1240,7 @@ func TestReportVerdict_RaceWithWorkerRetire(t *testing.T) {
 			processRepo := repository.NewMemoryProcessRepository()
 			taskRepo := repository.NewMemoryTaskRepository()
 			queueRepo := repository.NewMemoryQueueRepository(0)
-			bdExecutor := mocks.NewMockIssueExecutor(t)
+			bdExecutor := mocks.NewMockTaskExecutor(t)
 			// Mock AddComment for ReportVerdict
 			bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -1476,7 +1476,7 @@ func TestReportCompleteHandler_FailsOnBDError(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bd database connection refused")).Once()
 
 	// Add implementing worker
@@ -1517,7 +1517,7 @@ func TestReportCompleteHandler_SkipsCommentWhenSummaryEmpty(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// No AddComment expectation - test relies on mock.AssertExpectations to fail if it's called
 
 	worker := &repository.Process{
@@ -1559,7 +1559,7 @@ func TestReportCompleteHandler_CallsBDSynchronously(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Implementation complete: Feature implemented").Return(nil)
 
 	worker := &repository.Process{
@@ -1604,7 +1604,7 @@ func TestReportVerdictHandler_FailsOnBDError(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bd disk full"))
 
 	// Add implementer
@@ -1656,7 +1656,7 @@ func TestReportVerdictHandler_CallsBDSynchronously(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review DENIED by worker-2: Needs fixes").Return(nil)
 
 	implementer := &repository.Process{
@@ -1702,7 +1702,7 @@ func TestReportVerdictHandler_CorrectCommentForApproved(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-verdict-test", mock.Anything, "Review APPROVED by worker-2").Return(nil)
 
 	implementer := &repository.Process{
@@ -1759,7 +1759,7 @@ func TestReportVerdictHandler_PlaysApproveSound(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	soundService := mocks.NewMockSoundService(t)
 
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review APPROVED by worker-2").Return(nil)
@@ -1814,7 +1814,7 @@ func TestReportVerdictHandler_PlaysDenySound(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	soundService := mocks.NewMockSoundService(t)
 
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review DENIED by worker-2: Needs error handling").Return(nil)
@@ -1869,7 +1869,7 @@ func TestReportVerdictHandler_NilSoundService(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", mock.Anything, "Review APPROVED by worker-2").Return(nil)
 
@@ -1923,7 +1923,7 @@ func TestWithReportVerdictSoundService_SetsService(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	soundService := mocks.NewMockSoundService(t)
 
 	handler := NewReportVerdictHandler(
@@ -1941,7 +1941,7 @@ func TestWithReportVerdictSoundService_NilIgnored(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	handler := NewReportVerdictHandler(
 		processRepo, taskRepo, queueRepo,
@@ -1971,7 +1971,7 @@ func TestIntegration_DenialToReReviewCycle(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock AddComment for multiple ReportComplete and ReportVerdict calls
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -2141,7 +2141,7 @@ func TestIntegration_ReAssignReviewAfterDenial(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock AddComment for multiple ReportComplete and ReportVerdict calls
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -2253,7 +2253,7 @@ func TestIntegration_ApproveCommitFailsWhenTaskDenied(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
 	queueRepo := repository.NewMemoryQueueRepository(0)
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock AddComment for ReportComplete and ReportVerdict calls
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 

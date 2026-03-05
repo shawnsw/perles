@@ -6,9 +6,9 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
 	"github.com/zjrosen/perles/internal/ui/styles"
 
@@ -17,15 +17,15 @@ import (
 
 // Model holds the tree view state.
 type Model struct {
-	root        *TreeNode               // Current root of the tree
-	nodes       []*TreeNode             // Flattened visible nodes for navigation
-	cursor      int                     // Index into nodes slice
-	direction   Direction               // "down" or "up"
-	mode        TreeMode                // "deps" or "children"
-	rootStack   []string                // Stack of previous root IDs for back navigation
-	originalID  string                  // Original root issue ID (for 'U' to return)
-	issueMap    map[string]*beads.Issue // Cached issues for tree building
-	clock       shared.Clock            // Clock for formatting relative timestamps
+	root        *TreeNode              // Current root of the tree
+	nodes       []*TreeNode            // Flattened visible nodes for navigation
+	cursor      int                    // Index into nodes slice
+	direction   Direction              // "down" or "up"
+	mode        TreeMode               // "deps" or "children"
+	rootStack   []string               // Stack of previous root IDs for back navigation
+	originalID  string                 // Original root issue ID (for 'U' to return)
+	issueMap    map[string]*task.Issue // Cached issues for tree building
+	clock       shared.Clock           // Clock for formatting relative timestamps
 	width       int
 	height      int
 	scrollTop   int    // First visible line index (for viewport scrolling)
@@ -34,7 +34,7 @@ type Model struct {
 }
 
 // New creates a new tree model with default mode (deps).
-func New(rootID string, issueMap map[string]*beads.Issue, dir Direction, mode TreeMode, clock shared.Clock) *Model {
+func New(rootID string, issueMap map[string]*task.Issue, dir Direction, mode TreeMode, clock shared.Clock) *Model {
 	m := &Model{
 		direction:   dir,
 		mode:        mode,
@@ -537,12 +537,12 @@ func (m *Model) addSelectionGuide(prefix string) string {
 }
 
 // renderStatus renders the status badge.
-func (m *Model) renderStatus(status beads.Status) string {
+func (m *Model) renderStatus(status task.Status) string {
 	switch status {
-	case beads.StatusClosed:
+	case task.StatusClosed:
 		style := lipgloss.NewStyle().Foreground(styles.StatusClosedColor)
 		return style.Render("✓")
-	case beads.StatusInProgress:
+	case task.StatusInProgress:
 		style := lipgloss.NewStyle().Foreground(styles.StatusInProgressColor)
 		return style.Render("●")
 	default:

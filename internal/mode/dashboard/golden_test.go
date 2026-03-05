@@ -10,13 +10,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	fabricDomain "github.com/zjrosen/perles/internal/orchestration/fabric/domain"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/chatrender"
 )
@@ -850,12 +850,12 @@ func TestDashboard_View_Golden_WithIssueEditorModal(t *testing.T) {
 	m.height = 30
 
 	// Create a test issue and open the editor modal
-	testIssue := beads.Issue{
+	testIssue := task.Issue{
 		ID:        "task-001",
 		TitleText: "Implement authentication flow",
-		Status:    beads.StatusOpen,
-		Priority:  beads.PriorityHigh,
-		Type:      beads.TypeTask,
+		Status:    task.StatusOpen,
+		Priority:  task.PriorityHigh,
+		Type:      task.TypeTask,
 		Labels:    []string{"auth", "feature"},
 	}
 	editor := issueeditor.New(testIssue).SetSize(m.width, m.height)

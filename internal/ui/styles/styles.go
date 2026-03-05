@@ -2,9 +2,9 @@
 package styles
 
 import (
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/zjrosen/perles/internal/task"
 )
 
 var (
@@ -172,23 +172,23 @@ var (
 )
 
 // GetTypeIndicator returns the letter indicator for an issue type.
-func GetTypeIndicator(t beads.IssueType) string {
+func GetTypeIndicator(t task.IssueType) string {
 	switch t {
-	case beads.TypeBug:
+	case task.TypeBug:
 		return "[B]"
-	case beads.TypeFeature:
+	case task.TypeFeature:
 		return "[F]"
-	case beads.TypeTask:
+	case task.TypeTask:
 		return "[T]"
-	case beads.TypeEpic:
+	case task.TypeEpic:
 		return "[E]"
-	case beads.TypeChore:
+	case task.TypeChore:
 		return "[C]"
-	case beads.TypeMolecule:
+	case task.IssueType("molecule"):
 		return "[M]"
-	case beads.TypeConvoy:
+	case task.IssueType("convoy"):
 		return "[🚚]"
-	case beads.TypeAgent:
+	case task.IssueType("agent"):
 		return "[👨‍💼]"
 	default:
 		return "[?]"
@@ -196,23 +196,23 @@ func GetTypeIndicator(t beads.IssueType) string {
 }
 
 // GetTypeStyle returns the style for an issue type.
-func GetTypeStyle(t beads.IssueType) lipgloss.Style {
+func GetTypeStyle(t task.IssueType) lipgloss.Style {
 	switch t {
-	case beads.TypeBug:
+	case task.TypeBug:
 		return TypeBugStyle
-	case beads.TypeFeature:
+	case task.TypeFeature:
 		return TypeFeatureStyle
-	case beads.TypeTask:
+	case task.TypeTask:
 		return TypeTaskStyle
-	case beads.TypeEpic:
+	case task.TypeEpic:
 		return TypeEpicStyle
-	case beads.TypeChore:
+	case task.TypeChore:
 		return TypeChoreStyle
-	case beads.TypeMolecule:
+	case task.IssueType("molecule"):
 		return TypeMoleculeStyle
-	case beads.TypeConvoy:
+	case task.IssueType("convoy"):
 		return TypeConvoyStyle
-	case beads.TypeAgent:
+	case task.IssueType("agent"):
 		return TypeAgentStyle
 	default:
 		return lipgloss.NewStyle()
@@ -220,17 +220,17 @@ func GetTypeStyle(t beads.IssueType) lipgloss.Style {
 }
 
 // GetPriorityStyle returns the style for a priority level.
-func GetPriorityStyle(p beads.Priority) lipgloss.Style {
+func GetPriorityStyle(p task.Priority) lipgloss.Style {
 	switch p {
-	case beads.PriorityCritical:
+	case task.PriorityCritical:
 		return PriorityCriticalStyle
-	case beads.PriorityHigh:
+	case task.PriorityHigh:
 		return PriorityHighStyle
-	case beads.PriorityMedium:
+	case task.PriorityMedium:
 		return PriorityMediumStyle
-	case beads.PriorityLow:
+	case task.PriorityLow:
 		return PriorityLowStyle
-	case beads.PriorityBacklog:
+	case task.PriorityBacklog:
 		return PriorityBacklogStyle
 	default:
 		return lipgloss.NewStyle()

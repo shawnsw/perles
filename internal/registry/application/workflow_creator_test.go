@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/templates"
@@ -20,22 +20,22 @@ func TestWorkflowCreator_Create(t *testing.T) {
 		name        string
 		feature     string
 		workflowKey string
-		setupMock   func(*mocks.MockIssueExecutor)
+		setupMock   func(*mocks.MockTaskExecutor)
 		wantErr     bool
 		errContains string
 		wantTasks   int
-		checkResult func(*testing.T, *WorkflowResultDTO, *mocks.MockIssueExecutor)
+		checkResult func(*testing.T, *WorkflowResultDTO, *mocks.MockTaskExecutor)
 	}{
 		{
 			name:        "success - research-proposal creates tasks",
 			feature:     "test-feature",
 			workflowKey: "research-proposal",
-			setupMock: func(m *mocks.MockIssueExecutor) {
+			setupMock: func(m *mocks.MockTaskExecutor) {
 				m.EXPECT().CreateEpic(
 					"Research Proposal: Test Feature",
 					mock.AnythingOfType("string"),
 					[]string{"feature:test-feature", "workflow:research-proposal"},
-				).Return(beads.CreateResult{ID: "test-epic", Title: "Research Proposal: Test Feature"}, nil)
+				).Return(taskpkg.CreateResult{ID: "test-epic", Title: "Research Proposal: Test Feature"}, nil)
 
 				// Expect multiple task creations (16 nodes in research-proposal)
 				m.EXPECT().CreateTask(
@@ -44,13 +44,13 @@ func TestWorkflowCreator_Create(t *testing.T) {
 					"test-epic",
 					mock.AnythingOfType("string"), // assignee
 					[]string{"spec:plan"},
-				).Return(beads.CreateResult{ID: "task-1", Title: "Task"}, nil).Times(16)
+				).Return(taskpkg.CreateResult{ID: "task-1", Title: "Task"}, nil).Times(16)
 
 				// Expect dependency additions
 				m.EXPECT().AddDependency(mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(nil).Maybe()
 			},
 			wantTasks: 16,
-			checkResult: func(t *testing.T, result *WorkflowResultDTO, _ *mocks.MockIssueExecutor) {
+			checkResult: func(t *testing.T, result *WorkflowResultDTO, _ *mocks.MockTaskExecutor) {
 				require.Equal(t, "test-epic", result.Epic.ID)
 				require.Equal(t, "Research Proposal: Test Feature", result.Epic.Title)
 				require.Equal(t, "test-feature", result.Epic.Feature)
@@ -61,7 +61,7 @@ func TestWorkflowCreator_Create(t *testing.T) {
 			name:        "error - workflow not found",
 			feature:     "test-feature",
 			workflowKey: "nonexistent",
-			setupMock:   func(_ *mocks.MockIssueExecutor) {},
+			setupMock:   func(_ *mocks.MockTaskExecutor) {},
 			wantErr:     true,
 			errContains: "workflow not found",
 		},
@@ -69,12 +69,12 @@ func TestWorkflowCreator_Create(t *testing.T) {
 			name:        "error - bd create epic fails",
 			feature:     "test-feature",
 			workflowKey: "research-proposal",
-			setupMock: func(m *mocks.MockIssueExecutor) {
+			setupMock: func(m *mocks.MockTaskExecutor) {
 				m.EXPECT().CreateEpic(
 					mock.AnythingOfType("string"),
 					mock.AnythingOfType("string"),
 					mock.AnythingOfType("[]string"),
-				).Return(beads.CreateResult{}, errors.New("bd command failed: exit 1"))
+				).Return(taskpkg.CreateResult{}, errors.New("bd command failed: exit 1"))
 			},
 			wantErr:     true,
 			errContains: "create epic",
@@ -83,12 +83,12 @@ func TestWorkflowCreator_Create(t *testing.T) {
 			name:        "error - bd create task fails",
 			feature:     "test-feature",
 			workflowKey: "research-proposal",
-			setupMock: func(m *mocks.MockIssueExecutor) {
+			setupMock: func(m *mocks.MockTaskExecutor) {
 				m.EXPECT().CreateEpic(
 					mock.AnythingOfType("string"),
 					mock.AnythingOfType("string"),
 					mock.AnythingOfType("[]string"),
-				).Return(beads.CreateResult{ID: "test-epic", Title: "Plan: Test Feature"}, nil)
+				).Return(taskpkg.CreateResult{ID: "test-epic", Title: "Plan: Test Feature"}, nil)
 
 				m.EXPECT().CreateTask(
 					mock.AnythingOfType("string"),
@@ -96,7 +96,7 @@ func TestWorkflowCreator_Create(t *testing.T) {
 					"test-epic",
 					mock.AnythingOfType("string"), // assignee
 					mock.AnythingOfType("[]string"),
-				).Return(beads.CreateResult{}, errors.New("bd command failed: exit 1"))
+				).Return(taskpkg.CreateResult{}, errors.New("bd command failed: exit 1"))
 			},
 			wantErr:     true,
 			errContains: "create task",
@@ -106,7 +106,7 @@ func TestWorkflowCreator_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup mock
-			mockExecutor := mocks.NewMockIssueExecutor(t)
+			mockExecutor := mocks.NewMockTaskExecutor(t)
 			tt.setupMock(mockExecutor)
 
 			// Create service with real registry
@@ -145,7 +145,7 @@ func TestWorkflowCreator_NewWithConfig(t *testing.T) {
 	registrySvc, err := NewRegistryService(templates.RegistryFS(), nil, "")
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	cfg := config.TemplatesConfig{DocumentPath: "docs/custom"}
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, cfg)
@@ -157,12 +157,12 @@ func TestWorkflowCreator_CreateWithArgs_Config(t *testing.T) {
 	registrySvc, err := createRegistryServiceWithFS(createWorkflowCreatorConfigFS("Config entries: {{len .Config}}"))
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"Config Workflow: Test Feature",
 		mock.AnythingOfType("string"),
 		[]string{"feature:test-feature", "workflow:config-workflow"},
-	).Return(beads.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
+	).Return(taskpkg.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
 	mockExecutor.EXPECT().CreateTask(
 		"Task",
 		mock.MatchedBy(func(content string) bool {
@@ -171,7 +171,7 @@ func TestWorkflowCreator_CreateWithArgs_Config(t *testing.T) {
 		"test-epic",
 		mock.AnythingOfType("string"),
 		[]string{"spec:plan"},
-	).Return(beads.CreateResult{ID: "task-1", Title: "Task"}, nil)
+	).Return(taskpkg.CreateResult{ID: "task-1", Title: "Task"}, nil)
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{})
 
@@ -183,12 +183,12 @@ func TestWorkflowCreator_CreateWithArgs_ConfigDefault(t *testing.T) {
 	registrySvc, err := createRegistryServiceWithFS(createWorkflowCreatorConfigFS("Config: {{.Config.document_path}}"))
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"Config Workflow: Test Feature",
 		mock.AnythingOfType("string"),
 		[]string{"feature:test-feature", "workflow:config-workflow"},
-	).Return(beads.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
+	).Return(taskpkg.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
 	mockExecutor.EXPECT().CreateTask(
 		"Task",
 		mock.MatchedBy(func(content string) bool {
@@ -197,7 +197,7 @@ func TestWorkflowCreator_CreateWithArgs_ConfigDefault(t *testing.T) {
 		"test-epic",
 		mock.AnythingOfType("string"),
 		[]string{"spec:plan"},
-	).Return(beads.CreateResult{ID: "task-1", Title: "Task"}, nil)
+	).Return(taskpkg.CreateResult{ID: "task-1", Title: "Task"}, nil)
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{})
 
@@ -209,12 +209,12 @@ func TestWorkflowCreator_CreateWithArgs_ConfigCustom(t *testing.T) {
 	registrySvc, err := createRegistryServiceWithFS(createWorkflowCreatorConfigFS("Config: {{.Config.document_path}}"))
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"Config Workflow: Test Feature",
 		mock.AnythingOfType("string"),
 		[]string{"feature:test-feature", "workflow:config-workflow"},
-	).Return(beads.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
+	).Return(taskpkg.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
 	mockExecutor.EXPECT().CreateTask(
 		"Task",
 		mock.MatchedBy(func(content string) bool {
@@ -223,7 +223,7 @@ func TestWorkflowCreator_CreateWithArgs_ConfigCustom(t *testing.T) {
 		"test-epic",
 		mock.AnythingOfType("string"),
 		[]string{"spec:plan"},
-	).Return(beads.CreateResult{ID: "task-1", Title: "Task"}, nil)
+	).Return(taskpkg.CreateResult{ID: "task-1", Title: "Task"}, nil)
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{DocumentPath: "docs/custom"})
 
@@ -317,7 +317,7 @@ func TestWorkflowCreator_CreateWithArgs_CollaborativeWorkflow(t *testing.T) {
 	))
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"Collaborative Planning: Test Feature",
 		mock.MatchedBy(func(body string) bool {
@@ -325,7 +325,7 @@ func TestWorkflowCreator_CreateWithArgs_CollaborativeWorkflow(t *testing.T) {
 				strings.Contains(body, "Slug: test-feature")
 		}),
 		[]string{"feature:test-feature", "workflow:collab-planning"},
-	).Return(beads.CreateResult{ID: "epic-123", Title: "Collaborative Planning: Test Feature"}, nil)
+	).Return(taskpkg.CreateResult{ID: "epic-123", Title: "Collaborative Planning: Test Feature"}, nil)
 
 	// No CreateTask or AddDependency calls expected
 
@@ -354,12 +354,12 @@ func TestWorkflowCreator_CreateWithArgs_CollaborativeWorkflow_EpicCreationFails(
 	registrySvc, err := createRegistryServiceWithFS(createCollaborativeWorkflowFS("# Epic"))
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		mock.AnythingOfType("string"),
 		mock.AnythingOfType("string"),
 		mock.AnythingOfType("[]string"),
-	).Return(beads.CreateResult{}, errors.New("bd command failed"))
+	).Return(taskpkg.CreateResult{}, errors.New("bd command failed"))
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{})
 
@@ -398,7 +398,7 @@ registry:
 	registrySvc, err := createRegistryServiceWithFS(fsys)
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"No Epic Template: Test Feature",
 		mock.MatchedBy(func(body string) bool {
@@ -407,7 +407,7 @@ registry:
 				strings.Contains(body, "Feature: test-feature")
 		}),
 		[]string{"feature:test-feature", "workflow:no-epic-tmpl"},
-	).Return(beads.CreateResult{ID: "epic-456", Title: "No Epic Template: Test Feature"}, nil)
+	).Return(taskpkg.CreateResult{ID: "epic-456", Title: "No Epic Template: Test Feature"}, nil)
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{})
 
@@ -426,12 +426,12 @@ func TestWorkflowCreator_CreateWithArgs_EpicDrivenWorkflow(t *testing.T) {
 	registrySvc, err := createRegistryServiceWithFS(createEpicDrivenWorkflowFS())
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().CreateEpic(
 		"Epic Driven: My Epic",
 		mock.AnythingOfType("string"), // default description (no epic_template)
 		[]string{"feature:my-epic", "workflow:epic-driven"},
-	).Return(beads.CreateResult{ID: "epic-789", Title: "Epic Driven: My Epic"}, nil)
+	).Return(taskpkg.CreateResult{ID: "epic-789", Title: "Epic Driven: My Epic"}, nil)
 
 	creator := NewWorkflowCreator(registrySvc, mockExecutor, config.TemplatesConfig{})
 

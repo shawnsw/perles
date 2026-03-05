@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strconv"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
 
@@ -18,7 +18,7 @@ import (
 
 // Model holds the issue editor state.
 type Model struct {
-	issue beads.Issue
+	issue task.Issue
 	form  formmodal.Model
 }
 
@@ -28,8 +28,8 @@ type SaveMsg struct {
 	Title       string
 	Description string
 	Notes       string
-	Priority    beads.Priority
-	Status      beads.Status
+	Priority    task.Priority
+	Status      task.Status
 	Labels      []string
 }
 
@@ -39,8 +39,8 @@ type CancelMsg struct{}
 // BuildUpdateOptions compares the SaveMsg fields against the original issue
 // snapshot and returns an UpdateIssueOptions with only changed fields set (non-nil).
 // If original is nil (safety fallback), all fields are populated from the SaveMsg.
-func (m SaveMsg) BuildUpdateOptions(original *beads.Issue) beads.UpdateIssueOptions {
-	var opts beads.UpdateIssueOptions
+func (m SaveMsg) BuildUpdateOptions(original *task.Issue) task.UpdateOptions {
+	var opts task.UpdateOptions
 	if original == nil {
 		opts.Title = &m.Title
 		opts.Description = &m.Description
@@ -79,12 +79,12 @@ func (m SaveMsg) BuildUpdateOptions(original *beads.Issue) beads.UpdateIssueOpti
 
 // New creates a new issue editor with vim mode disabled by default.
 // Use NewWithVimMode to control vim behavior from user configuration.
-func New(issue beads.Issue) Model {
+func New(issue task.Issue) Model {
 	return NewWithVimMode(issue, false)
 }
 
 // NewWithVimMode creates a new issue editor with the given issue and vim mode setting.
-func NewWithVimMode(issue beads.Issue, vimEnabled bool) Model {
+func NewWithVimMode(issue task.Issue, vimEnabled bool) Model {
 	m := Model{issue: issue}
 
 	cfg := formmodal.FormConfig{
@@ -168,7 +168,7 @@ func NewWithVimMode(issue beads.Issue, vimEnabled bool) Model {
 				Description: values["description"].(string),
 				Notes:       values["notes"].(string),
 				Priority:    parsePriority(values["priority"].(string)),
-				Status:      beads.Status(values["status"].(string)),
+				Status:      task.Status(values["status"].(string)),
 				Labels:      values["labels"].([]string),
 			}
 		},
@@ -181,7 +181,7 @@ func NewWithVimMode(issue beads.Issue, vimEnabled bool) Model {
 
 // priorityListOptions converts shared.PriorityOptions to formmodal.ListOption
 // with the current priority pre-selected, preserving colors.
-func priorityListOptions(current beads.Priority) []formmodal.ListOption {
+func priorityListOptions(current task.Priority) []formmodal.ListOption {
 	opts := shared.PriorityOptions()
 	result := make([]formmodal.ListOption, len(opts))
 	for i, opt := range opts {
@@ -197,7 +197,7 @@ func priorityListOptions(current beads.Priority) []formmodal.ListOption {
 
 // statusListOptions converts shared.StatusOptions to formmodal.ListOption
 // with the current status pre-selected, preserving colors.
-func statusListOptions(current beads.Status) []formmodal.ListOption {
+func statusListOptions(current task.Status) []formmodal.ListOption {
 	opts := shared.StatusOptions()
 	result := make([]formmodal.ListOption, len(opts))
 	for i, opt := range opts {
@@ -225,14 +225,14 @@ func labelsListOptions(labels []string) []formmodal.ListOption {
 	return result
 }
 
-// parsePriority parses a priority string value (e.g., "P0") to beads.Priority.
-func parsePriority(value string) beads.Priority {
+// parsePriority parses a priority string value (e.g., "P0") to task.Priority.
+func parsePriority(value string) task.Priority {
 	if len(value) >= 2 && value[0] == 'P' {
 		if p, err := strconv.Atoi(value[1:]); err == nil && p >= 0 && p <= 4 {
-			return beads.Priority(p)
+			return task.Priority(p)
 		}
 	}
-	return beads.PriorityMedium // default to medium if parsing fails
+	return task.PriorityMedium // default to medium if parsing fails
 }
 
 // SetSize sets the viewport dimensions for overlay rendering.

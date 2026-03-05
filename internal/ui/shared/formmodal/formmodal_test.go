@@ -13,7 +13,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/colorpicker"
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
 )
@@ -4600,10 +4600,10 @@ func TestEpicSearchField_FieldConfig_EpicSearchExecutor(t *testing.T) {
 
 // mockBQLExecutor is a minimal mock for testing EpicSearchExecutor field access
 type mockBQLExecutor struct {
-	executeFunc func(query string) ([]beads.Issue, error)
+	executeFunc func(query string) ([]task.Issue, error)
 }
 
-func (m *mockBQLExecutor) Execute(query string) ([]beads.Issue, error) {
+func (m *mockBQLExecutor) Execute(query string) ([]task.Issue, error) {
 	if m.executeFunc != nil {
 		return m.executeFunc(query)
 	}
@@ -4915,7 +4915,7 @@ func TestEpicSearchField_StaleResultsDiscarded(t *testing.T) {
 	// Simulate stale result arriving (old queryID)
 	staleResult := epicSearchResultsMsg{
 		fieldIndex: 0,
-		issues: []beads.Issue{
+		issues: []task.Issue{
 			{ID: "stale-epic", TitleText: "Stale Result"},
 		},
 		queryID: oldQueryID,
@@ -4928,7 +4928,7 @@ func TestEpicSearchField_StaleResultsDiscarded(t *testing.T) {
 	// Now send fresh result
 	freshResult := epicSearchResultsMsg{
 		fieldIndex: 0,
-		issues: []beads.Issue{
+		issues: []task.Issue{
 			{ID: "fresh-epic", TitleText: "Fresh Result"},
 		},
 		queryID: newQueryID,

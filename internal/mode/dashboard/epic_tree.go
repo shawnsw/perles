@@ -6,11 +6,10 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
@@ -19,7 +18,7 @@ import (
 
 // loadEpicTree creates a command to load the epic tree data for the given epic ID.
 // It executes a BQL query to fetch the epic and all its children using expand down depth *.
-func loadEpicTree(epicID string, executor bql.BQLExecutor) tea.Cmd {
+func loadEpicTree(epicID string, executor task.QueryExecutor) tea.Cmd {
 	if epicID == "" || executor == nil {
 		return nil
 	}
@@ -60,7 +59,7 @@ func (m Model) handleEpicTreeLoaded(msg epicTreeLoadedMsg) (mode.Controller, tea
 	}
 
 	// Build issue map for tree construction
-	issueMap := make(map[string]*beads.Issue, len(msg.Issues))
+	issueMap := make(map[string]*task.Issue, len(msg.Issues))
 	for i := range msg.Issues {
 		issueMap[msg.Issues[i].ID] = &msg.Issues[i]
 	}
@@ -126,7 +125,7 @@ func (m *Model) updateEpicDetail() {
 
 	// Create new details panel for the selected issue
 	// Use executor and client from services for dependency loading and comments
-	m.epicDetails = details.New(node.Issue, m.services.Executor, m.services.Client).
+	m.epicDetails = details.New(node.Issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
 		SetHideFooter(true)
 
@@ -196,7 +195,7 @@ func (m *Model) triggerEpicTreeLoad() tea.Cmd {
 	m.lastLoadedEpicID = epicID
 
 	// Load immediately - queries are fast enough that debouncing is unnecessary
-	return loadEpicTree(epicID, m.services.Executor)
+	return loadEpicTree(epicID, m.services.QueryExecutor)
 }
 
 // handleEpicTreeKeysFocusTree handles key events when the tree pane has focus within the epic view.

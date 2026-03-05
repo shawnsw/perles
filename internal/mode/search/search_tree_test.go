@@ -10,10 +10,10 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/tree"
 )
@@ -46,8 +46,8 @@ func createTestModelInTreeMode(t *testing.T) Model {
 }
 
 // buildIssueMap creates a map from issues slice for tree.New.
-func buildIssueMap(issues []beads.Issue) map[string]*beads.Issue {
-	m := make(map[string]*beads.Issue)
+func buildIssueMap(issues []task.Issue) map[string]*task.Issue {
+	m := make(map[string]*task.Issue)
 	for i := range issues {
 		m[issues[i].ID] = &issues[i]
 	}
@@ -55,7 +55,7 @@ func buildIssueMap(issues []beads.Issue) map[string]*beads.Issue {
 }
 
 // createTestModelWithTree creates a model with a loaded tree.
-func createTestModelWithTree(t *testing.T, rootIssue beads.Issue, issues []beads.Issue) Model {
+func createTestModelWithTree(t *testing.T, rootIssue task.Issue, issues []task.Issue) Model {
 	m := createTestModelInTreeMode(t)
 	m.treeRoot = &rootIssue
 
@@ -69,26 +69,26 @@ func TestSearch_TreeView_Golden_Loading(t *testing.T) {
 	m := createTestModelInTreeMode(t)
 	m = m.SetSize(160, 30)
 	// No tree loaded yet - should show loading state
-	m.treeRoot = &beads.Issue{ID: "test-root"}
+	m.treeRoot = &task.Issue{ID: "test-root"}
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
 }
 
 func TestSearch_TreeView_Golden_WithTree(t *testing.T) {
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "epic-1",
 		TitleText: "Epic: Implement new feature",
-		Type:      beads.TypeEpic,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeEpic,
+		Status:    task.StatusOpen,
 		Priority:  1,
 		Children:  []string{"task-1", "task-2", "task-3"},
 	}
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		rootIssue,
-		{ID: "task-1", TitleText: "Design API", Type: beads.TypeTask, Status: beads.StatusClosed, Priority: 1, ParentID: "epic-1"},
-		{ID: "task-2", TitleText: "Implement backend", Type: beads.TypeTask, Status: beads.StatusInProgress, Priority: 1, ParentID: "epic-1"},
-		{ID: "task-3", TitleText: "Add tests", Type: beads.TypeTask, Status: beads.StatusOpen, Priority: 2, ParentID: "epic-1"},
+		{ID: "task-1", TitleText: "Design API", Type: task.TypeTask, Status: task.StatusClosed, Priority: 1, ParentID: "epic-1"},
+		{ID: "task-2", TitleText: "Implement backend", Type: task.TypeTask, Status: task.StatusInProgress, Priority: 1, ParentID: "epic-1"},
+		{ID: "task-3", TitleText: "Add tests", Type: task.TypeTask, Status: task.StatusOpen, Priority: 2, ParentID: "epic-1"},
 	}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
@@ -99,17 +99,17 @@ func TestSearch_TreeView_Golden_WithTree(t *testing.T) {
 }
 
 func TestSearch_TreeView_Golden_DownDirection(t *testing.T) {
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "parent-1",
 		TitleText: "Parent Issue",
-		Type:      beads.TypeTask,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Status:    task.StatusOpen,
 		Children:  []string{"child-1", "child-2"},
 	}
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		rootIssue,
-		{ID: "child-1", TitleText: "Child A", Type: beads.TypeTask, Status: beads.StatusClosed, ParentID: "parent-1"},
-		{ID: "child-2", TitleText: "Child B", Type: beads.TypeTask, Status: beads.StatusOpen, ParentID: "parent-1"},
+		{ID: "child-1", TitleText: "Child A", Type: task.TypeTask, Status: task.StatusClosed, ParentID: "parent-1"},
+		{ID: "child-2", TitleText: "Child B", Type: task.TypeTask, Status: task.StatusOpen, ParentID: "parent-1"},
 	}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
@@ -122,21 +122,21 @@ func TestSearch_TreeView_Golden_DownDirection(t *testing.T) {
 }
 
 func TestSearch_TreeView_Golden_UpDirection(t *testing.T) {
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "child-1",
 		TitleText: "Child Issue",
-		Type:      beads.TypeTask,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Status:    task.StatusOpen,
 		ParentID:  "parent-1",
 	}
-	parentIssue := beads.Issue{
+	parentIssue := task.Issue{
 		ID:        "parent-1",
 		TitleText: "Parent Issue",
-		Type:      beads.TypeEpic,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeEpic,
+		Status:    task.StatusOpen,
 		Children:  []string{"child-1"},
 	}
-	issues := []beads.Issue{parentIssue, rootIssue}
+	issues := []task.Issue{parentIssue, rootIssue}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
 	issueMap := buildIssueMap(issues)
@@ -149,20 +149,20 @@ func TestSearch_TreeView_Golden_UpDirection(t *testing.T) {
 
 func TestSearch_TreeView_Golden_ChildrenMode(t *testing.T) {
 	// Create an epic with children and also a dependency
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "epic-1",
 		TitleText: "Epic: Implement new feature",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Priority:  1,
-		Status:    beads.StatusOpen,
+		Status:    task.StatusOpen,
 		Children:  []string{"task-1", "task-2"},
 		Blocks:    []string{"task-3"}, // This should NOT appear in children mode
 	}
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		rootIssue,
-		{ID: "task-1", TitleText: "Design API", Type: beads.TypeTask, Priority: 1, Status: beads.StatusClosed, ParentID: "epic-1"},
-		{ID: "task-2", TitleText: "Implement backend", Type: beads.TypeTask, Priority: 1, Status: beads.StatusInProgress, ParentID: "epic-1"},
-		{ID: "task-3", TitleText: "Blocked task (dependency)", Type: beads.TypeTask, Priority: 2, Status: beads.StatusOpen}, // No ParentID - pure dependency
+		{ID: "task-1", TitleText: "Design API", Type: task.TypeTask, Priority: 1, Status: task.StatusClosed, ParentID: "epic-1"},
+		{ID: "task-2", TitleText: "Implement backend", Type: task.TypeTask, Priority: 1, Status: task.StatusInProgress, ParentID: "epic-1"},
+		{ID: "task-3", TitleText: "Blocked task (dependency)", Type: task.TypeTask, Priority: 2, Status: task.StatusOpen}, // No ParentID - pure dependency
 	}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
@@ -177,22 +177,22 @@ func TestSearch_TreeView_Golden_ChildrenMode(t *testing.T) {
 
 // TestSearch_TreeView_Golden_WithLongAssignee tests tree view with a long assignee that might wrap.
 func TestSearch_TreeView_Golden_WithLongAssignee(t *testing.T) {
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:              "epic-1",
 		TitleText:       "Epic: Implement new feature",
 		DescriptionText: "This is a test issue with a long assignee.",
-		Type:            beads.TypeEpic,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeEpic,
+		Status:          task.StatusOpen,
 		Priority:        1,
 		Assignee:        "this/is/a/verylong/assignee/name/that/will/wrap",
 		Children:        []string{"task-1", "task-2"},
 		CreatedAt:       testCreatedAt,
 		UpdatedAt:       testCreatedAt,
 	}
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		rootIssue,
-		{ID: "task-1", TitleText: "Design API", Type: beads.TypeTask, Status: beads.StatusClosed, Priority: 1, ParentID: "epic-1", CreatedAt: testCreatedAt},
-		{ID: "task-2", TitleText: "Implement backend", Type: beads.TypeTask, Status: beads.StatusInProgress, Priority: 1, ParentID: "epic-1", CreatedAt: testCreatedAt},
+		{ID: "task-1", TitleText: "Design API", Type: task.TypeTask, Status: task.StatusClosed, Priority: 1, ParentID: "epic-1", CreatedAt: testCreatedAt},
+		{ID: "task-2", TitleText: "Implement backend", Type: task.TypeTask, Status: task.StatusInProgress, Priority: 1, ParentID: "epic-1", CreatedAt: testCreatedAt},
 	}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
@@ -201,7 +201,7 @@ func TestSearch_TreeView_Golden_WithLongAssignee(t *testing.T) {
 	m = m.SetSize(220, 30)
 	// Set up details panel with the root issue
 	// Width 107 (109-2 for border) is above minTwoColumnWidth (100) so two-column layout is used
-	m.details = details.New(rootIssue, m.services.Executor, m.services.Client).SetSize(107, 28)
+	m.details = details.New(rootIssue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(107, 28)
 	m.hasDetail = true
 	m.focus = FocusDetails
 
@@ -257,8 +257,8 @@ func TestSearch_TreeSubMode_Initialization(t *testing.T) {
 }
 
 func TestSearch_TreeSubMode_EnterListClearsTreeState(t *testing.T) {
-	rootIssue := beads.Issue{ID: "root", TitleText: "Root"}
-	m := createTestModelWithTree(t, rootIssue, []beads.Issue{rootIssue})
+	rootIssue := task.Issue{ID: "root", TitleText: "Root"}
+	m := createTestModelWithTree(t, rootIssue, []task.Issue{rootIssue})
 
 	// Verify tree state is set
 	require.Equal(t, mode.SubModeTree, m.subMode)
@@ -279,8 +279,8 @@ func TestSearch_EnterTreeMode_ClearsOldTreeState(t *testing.T) {
 	// then opens Epic B. Without clearing m.tree, handleTreeLoaded()
 	// would restore selection to Task A (if it's a child of Epic B).
 
-	rootIssue := beads.Issue{ID: "task-1", TitleText: "Task A"}
-	m := createTestModelWithTree(t, rootIssue, []beads.Issue{rootIssue})
+	rootIssue := task.Issue{ID: "task-1", TitleText: "Task A"}
+	m := createTestModelWithTree(t, rootIssue, []task.Issue{rootIssue})
 
 	// Verify tree state exists (simulating previous tree session)
 	require.NotNil(t, m.tree, "precondition: tree should be set")
@@ -300,18 +300,18 @@ func TestSearch_EnterTreeMode_ClearsOldTreeState(t *testing.T) {
 
 // createTreeTestModel creates a model in tree sub-mode with multiple children for key testing.
 func createTreeTestModel(t *testing.T) Model {
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "root-1",
 		TitleText: "Root Issue",
-		Type:      beads.TypeEpic,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeEpic,
+		Status:    task.StatusOpen,
 		Children:  []string{"child-1", "child-2", "child-3"},
 	}
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		rootIssue,
-		{ID: "child-1", TitleText: "First Child", Type: beads.TypeTask, Status: beads.StatusClosed, ParentID: "root-1"},
-		{ID: "child-2", TitleText: "Second Child", Type: beads.TypeTask, Status: beads.StatusInProgress, ParentID: "root-1"},
-		{ID: "child-3", TitleText: "Third Child", Type: beads.TypeTask, Status: beads.StatusOpen, ParentID: "root-1"},
+		{ID: "child-1", TitleText: "First Child", Type: task.TypeTask, Status: task.StatusClosed, ParentID: "root-1"},
+		{ID: "child-2", TitleText: "Second Child", Type: task.TypeTask, Status: task.StatusInProgress, ParentID: "root-1"},
+		{ID: "child-3", TitleText: "Third Child", Type: task.TypeTask, Status: task.StatusOpen, ParentID: "root-1"},
 	}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
@@ -588,14 +588,14 @@ func TestHandleIssueDeleted_TreeMode_NonRootDeletion(t *testing.T) {
 
 func TestHandleIssueDeleted_TreeMode_RootDeletionWithParent(t *testing.T) {
 	// Setup: Tree mode where root has a parent
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "child-root",
 		TitleText: "Child as Root",
-		Type:      beads.TypeTask,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Status:    task.StatusOpen,
 		ParentID:  "parent-1", // Has a parent
 	}
-	issues := []beads.Issue{rootIssue}
+	issues := []task.Issue{rootIssue}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
 	require.Equal(t, mode.SubModeTree, m.subMode)
@@ -619,14 +619,14 @@ func TestHandleIssueDeleted_TreeMode_RootDeletionWithParent(t *testing.T) {
 
 func TestHandleIssueDeleted_TreeMode_RootDeletionWithoutParent(t *testing.T) {
 	// Setup: Tree mode where root has no parent (orphan root)
-	rootIssue := beads.Issue{
+	rootIssue := task.Issue{
 		ID:        "orphan-root",
 		TitleText: "Orphan Root",
-		Type:      beads.TypeTask,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Status:    task.StatusOpen,
 		ParentID:  "", // No parent
 	}
-	issues := []beads.Issue{rootIssue}
+	issues := []task.Issue{rootIssue}
 
 	m := createTestModelWithTree(t, rootIssue, issues)
 	require.Equal(t, mode.SubModeTree, m.subMode)
@@ -755,7 +755,7 @@ func TestTreeSubMode_EditKey_TreeLoading_NoOp(t *testing.T) {
 	// Create a model in tree sub-mode but with no tree loaded yet (loading state)
 	m := createTestModelInTreeMode(t)
 	m.focus = FocusResults
-	m.treeRoot = &beads.Issue{ID: "loading-root"}
+	m.treeRoot = &task.Issue{ID: "loading-root"}
 	// m.tree is nil (loading state)
 	require.Nil(t, m.tree, "precondition: tree should be nil (loading)")
 
@@ -773,7 +773,7 @@ func TestTreeSubMode_DeleteKey_TreeLoading_NoOp(t *testing.T) {
 	// the general 'd' handler which checks focus and selected issue.
 	m := createTestModelInTreeMode(t)
 	m.focus = FocusResults
-	m.treeRoot = &beads.Issue{ID: "loading-root"}
+	m.treeRoot = &task.Issue{ID: "loading-root"}
 	// m.tree is nil (loading state)
 	require.Nil(t, m.tree, "precondition: tree should be nil (loading)")
 

@@ -3,25 +3,27 @@ package outdated
 import (
 	"testing"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/stretchr/testify/require"
 )
 
+// testRequiredVersion is a representative minimum version string used in tests.
+// This avoids importing beads domain types into the backend-agnostic outdated UI.
+const testRequiredVersion = "0.41.0"
+
 func TestOutdated_New(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion)
+	m := New("0.29.0", testRequiredVersion)
 
 	// Verify model is created with versions but zero dimensions
 	require.Equal(t, 0, m.width, "expected width to be 0")
 	require.Equal(t, 0, m.height, "expected height to be 0")
 	require.Equal(t, "0.29.0", m.currentVersion, "expected current version")
-	require.Equal(t, beads.MinBeadsVersion, m.requiredVersion, "expected required version")
+	require.Equal(t, testRequiredVersion, m.requiredVersion, "expected required version")
 }
 
 func TestOutdated_Init(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion)
+	m := New("0.29.0", testRequiredVersion)
 
 	// Init should return nil (no initial command)
 	cmd := m.Init()
@@ -29,7 +31,7 @@ func TestOutdated_Init(t *testing.T) {
 }
 
 func TestOutdated_SetSize(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion)
+	m := New("0.29.0", testRequiredVersion)
 
 	// Set dimensions
 	m = m.SetSize(120, 40)
@@ -45,7 +47,7 @@ func TestOutdated_SetSize(t *testing.T) {
 }
 
 func TestOutdated_WindowSizeMsg(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion)
+	m := New("0.29.0", testRequiredVersion)
 
 	// Send WindowSizeMsg
 	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
@@ -70,7 +72,7 @@ func TestOutdated_QuitKeys(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+			m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 			_, cmd := m.Update(tt.key)
 
 			// Should return tea.Quit command
@@ -85,7 +87,7 @@ func TestOutdated_QuitKeys(t *testing.T) {
 }
 
 func TestOutdated_OtherKeyMsg(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 
 	// Send a random key
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
@@ -108,7 +110,7 @@ func TestOutdated_EmptyDimensions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New("0.29.0", beads.MinBeadsVersion).SetSize(tt.width, tt.height)
+			m := New("0.29.0", testRequiredVersion).SetSize(tt.width, tt.height)
 			view := m.View()
 
 			require.Equal(t, "", view, "expected empty string for zero dimensions")
@@ -117,36 +119,36 @@ func TestOutdated_EmptyDimensions(t *testing.T) {
 }
 
 func TestOutdated_View_ContainsTitle(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view := m.View()
 
 	require.Contains(t, view, "break in the chain", "expected view to contain title")
 }
 
 func TestOutdated_View_ContainsVersions(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view := m.View()
 
 	require.Contains(t, view, "0.29.0", "expected view to contain current version")
-	require.Contains(t, view, beads.MinBeadsVersion, "expected view to contain required version")
+	require.Contains(t, view, testRequiredVersion, "expected view to contain required version")
 }
 
 func TestOutdated_View_ContainsUpgradeInstructions(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view := m.View()
 
 	require.Contains(t, view, "bd migrate", "expected view to contain upgrade instruction")
 }
 
 func TestOutdated_View_ContainsHint(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view := m.View()
 
 	require.Contains(t, view, "Press q to quit", "expected view to contain quit hint")
 }
 
 func TestOutdated_View_ContainsChainArt(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(120, 40)
+	m := New("0.29.0", testRequiredVersion).SetSize(120, 40)
 	view := m.View()
 
 	// Chain links use box-drawing characters
@@ -155,7 +157,7 @@ func TestOutdated_View_ContainsChainArt(t *testing.T) {
 }
 
 func TestOutdated_View_Stability(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view1 := m.View()
 	view2 := m.View()
 
@@ -181,7 +183,7 @@ func TestOutdated_View_VariousSizes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := New("0.29.0", beads.MinBeadsVersion).SetSize(tt.width, tt.height)
+			m := New("0.29.0", testRequiredVersion).SetSize(tt.width, tt.height)
 			view := m.View()
 
 			// All sizes should render the core content
@@ -195,7 +197,7 @@ func TestOutdated_View_VariousSizes(t *testing.T) {
 // TestOutdated_View_Golden_Standard uses teatest golden file comparison for 80x24
 // Run with -update flag to update golden files: go test -update ./internal/ui/outdated/...
 func TestOutdated_View_Golden_Standard(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(80, 24)
+	m := New("0.29.0", testRequiredVersion).SetSize(80, 24)
 	view := m.View()
 
 	// teatest's RequireEqualOutput compares against golden files in testdata/
@@ -204,7 +206,7 @@ func TestOutdated_View_Golden_Standard(t *testing.T) {
 
 // TestOutdated_View_Golden_Large uses teatest golden file comparison for 120x40
 func TestOutdated_View_Golden_Large(t *testing.T) {
-	m := New("0.29.0", beads.MinBeadsVersion).SetSize(120, 40)
+	m := New("0.29.0", testRequiredVersion).SetSize(120, 40)
 	view := m.View()
 
 	teatest.RequireEqualOutput(t, []byte(view))

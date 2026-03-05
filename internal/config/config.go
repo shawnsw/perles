@@ -33,6 +33,7 @@ type ViewConfig struct {
 
 // Config holds all configuration options for perles.
 type Config struct {
+	Backend       string              `mapstructure:"backend"` // "beads" (default), future: "linear", "github", etc.
 	BeadsDir      string              `mapstructure:"beads_dir"`
 	AutoRefresh   bool                `mapstructure:"auto_refresh"`
 	UI            UIConfig            `mapstructure:"ui"`
@@ -185,26 +186,26 @@ func DefaultTimeoutsConfig() TimeoutsConfig {
 
 // OrchestrationConfig holds orchestration mode configuration.
 type OrchestrationConfig struct {
-	Client            string               `mapstructure:"client"`             // "claude" (default), "amp", "codex", or "gemini" - backward compat
-	CoordinatorClient string               `mapstructure:"coordinator_client"` // Client for coordinator (overrides Client)
-	WorkerClient      string               `mapstructure:"worker_client"`      // Client for workers (overrides Client)
-	ObserverClient    string               `mapstructure:"observer_client"`    // Client for observer (default: "claude" with haiku model)
-	ObserverEnabled   bool                 `mapstructure:"observer_enabled"`   // Enable observer agent (default: false)
-	APIPort           int                  `mapstructure:"api_port"`           // HTTP API port (0 = auto-assign, default: 0)
-	Claude            ClaudeClientConfig   `mapstructure:"claude"`
-	ClaudeWorker      ClaudeClientConfig   `mapstructure:"claude_worker"`   // Worker-specific Claude config (uses claude config if empty)
-	ClaudeObserver    ClaudeClientConfig   `mapstructure:"claude_observer"` // Observer-specific Claude config (uses claude config if empty)
-	Codex             CodexClientConfig    `mapstructure:"codex"`
-	Amp               AmpClientConfig      `mapstructure:"amp"`
-	Gemini            GeminiClientConfig   `mapstructure:"gemini"`
-	OpenCode          OpenCodeClientConfig `mapstructure:"opencode"`
-	Cursor            CursorClientConfig   `mapstructure:"cursor"`
-	Workflows         []WorkflowConfig     `mapstructure:"workflows"`       // Workflow template configurations
+	Client             string               `mapstructure:"client"`             // "claude" (default), "amp", "codex", or "gemini" - backward compat
+	CoordinatorClient  string               `mapstructure:"coordinator_client"` // Client for coordinator (overrides Client)
+	WorkerClient       string               `mapstructure:"worker_client"`      // Client for workers (overrides Client)
+	ObserverClient     string               `mapstructure:"observer_client"`    // Client for observer (default: "claude" with haiku model)
+	ObserverEnabled    bool                 `mapstructure:"observer_enabled"`   // Enable observer agent (default: false)
+	APIPort            int                  `mapstructure:"api_port"`           // HTTP API port (0 = auto-assign, default: 0)
+	Claude             ClaudeClientConfig   `mapstructure:"claude"`
+	ClaudeWorker       ClaudeClientConfig   `mapstructure:"claude_worker"`   // Worker-specific Claude config (uses claude config if empty)
+	ClaudeObserver     ClaudeClientConfig   `mapstructure:"claude_observer"` // Observer-specific Claude config (uses claude config if empty)
+	Codex              CodexClientConfig    `mapstructure:"codex"`
+	Amp                AmpClientConfig      `mapstructure:"amp"`
+	Gemini             GeminiClientConfig   `mapstructure:"gemini"`
+	OpenCode           OpenCodeClientConfig `mapstructure:"opencode"`
+	Cursor             CursorClientConfig   `mapstructure:"cursor"`
+	Workflows          []WorkflowConfig     `mapstructure:"workflows"`           // Workflow template configurations
 	CommunityWorkflows []string             `mapstructure:"community_workflows"` // Community workflow IDs to enable
-	Tracing           TracingConfig        `mapstructure:"tracing"`         // Distributed tracing configuration
-	SessionStorage    SessionStorageConfig `mapstructure:"session_storage"` // Session storage location configuration
-	Templates         TemplatesConfig      `mapstructure:"templates"`       // Template rendering variables
-	Timeouts          TimeoutsConfig       `mapstructure:"timeouts"`        // Initialization phase timeout configuration
+	Tracing            TracingConfig        `mapstructure:"tracing"`             // Distributed tracing configuration
+	SessionStorage     SessionStorageConfig `mapstructure:"session_storage"`     // Session storage location configuration
+	Templates          TemplatesConfig      `mapstructure:"templates"`           // Template rendering variables
+	Timeouts           TimeoutsConfig       `mapstructure:"timeouts"`            // Initialization phase timeout configuration
 }
 
 // ClaudeClientConfig holds Claude-specific settings.
@@ -984,6 +985,7 @@ func (c *Config) SetColumnsForView(viewIndex int, columns []ColumnConfig) {
 // Defaults returns a Config with sensible default values.
 func Defaults() Config {
 	return Config{
+		Backend:     "beads",
 		AutoRefresh: true,
 		UI: UIConfig{
 			ShowCounts:    true,

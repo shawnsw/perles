@@ -6,19 +6,29 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/coleditor"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
 	"github.com/zjrosen/perles/internal/ui/shared/picker"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
+	"github.com/zjrosen/perles/internal/ui/shared/vimtextarea"
 )
+
+// syntaxLexer returns a SyntaxLexer from the SyntaxHighlighter service, or nil.
+func (m Model) syntaxLexer() vimtextarea.SyntaxLexer {
+	if m.services.SyntaxHighlighter == nil {
+		return nil
+	}
+	lexer, _ := m.services.SyntaxHighlighter.NewSyntaxLexer().(vimtextarea.SyntaxLexer)
+	return lexer
+}
 
 // handleKey routes key messages to the appropriate handler based on view mode.
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -101,7 +111,7 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if focusedCol >= 0 && focusedCol < len(columns) {
 			// Pass executor for BQL preview queries, vim mode, and clipboard
 			vimEnabled := m.services.Config.UI.VimMode
-			m.colEditor = coleditor.New(focusedCol, columns, m.services.Executor, vimEnabled, m.services.Clipboard).
+			m.colEditor = coleditor.New(focusedCol, columns, m.services.QueryExecutor, m.syntaxLexer(), vimEnabled, m.services.Clipboard).
 				SetSize(m.width, m.height)
 			m.view = ViewColumnEditor
 		}
@@ -120,7 +130,7 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 		// Create editor in New mode with clipboard for yank operations
 		vimEnabled := m.services.Config.UI.VimMode
-		m.colEditor = coleditor.NewForCreate(insertAfter, columns, m.services.Executor, vimEnabled, m.services.Clipboard).
+		m.colEditor = coleditor.NewForCreate(insertAfter, columns, m.services.QueryExecutor, m.syntaxLexer(), vimEnabled, m.services.Clipboard).
 			SetSize(m.width, m.height)
 		m.view = ViewColumnEditor
 		return m, nil
@@ -411,7 +421,7 @@ func (m Model) handleDeleteIssueKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 // openDeleteConfirm opens the delete confirmation modal.
 func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 	// Get full issue data
-	var issue *beads.Issue
+	var issue *task.Issue
 
 	// First try to get from selected issue on board
 	if selected := m.board.SelectedIssue(); selected != nil && selected.ID == msg.IssueID {
@@ -420,7 +430,7 @@ func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 
 	// Fallback: query via executor if needed
 	if issue == nil {
-		issues, err := m.services.Executor.Execute(fmt.Sprintf(`id = "%s"`, msg.IssueID))
+		issues, err := m.services.QueryExecutor.Execute(fmt.Sprintf(`id = "%s"`, msg.IssueID))
 		if err != nil || len(issues) == 0 {
 			m.err = fmt.Errorf("could not find issue %s", msg.IssueID)
 			m.errContext = "preparing delete"
@@ -430,7 +440,7 @@ func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 	}
 
 	// Create delete modal using shared component
-	m.modal, m.deleteIssueIDs = shared.CreateDeleteModal(issue, m.services.Executor)
+	m.modal, m.deleteIssueIDs = shared.CreateDeleteModal(issue, m.services.QueryExecutor)
 	m.modal.SetSize(m.width, m.height)
 	m.selectedIssue = issue
 	m.view = ViewDeleteIssue
@@ -771,7 +781,7 @@ func (m Model) deleteIssueCmd(issueIDs []string) tea.Cmd {
 		if len(issueIDs) == 0 {
 			return issueDeletedMsg{err: nil}
 		}
-		err := m.services.BeadsExecutor.DeleteIssues(issueIDs)
+		err := m.services.TaskExecutor.DeleteIssues(issueIDs)
 		return issueDeletedMsg{err: err}
 	}
 }

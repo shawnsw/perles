@@ -82,7 +82,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/zjrosen/perles/internal/bql"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
 )
 
@@ -207,8 +207,8 @@ type FieldConfig struct {
 	VimEnabled bool // Enable vim mode for textarea (default: false, starts in Insert mode)
 
 	// EpicSearch field options (FieldTypeEpicSearch)
-	EpicSearchExecutor bql.BQLExecutor // Required: injected for query execution
-	DebounceMs         int             // Debounce delay in milliseconds (default: 200ms)
+	EpicSearchExecutor task.QueryExecutor // Required: injected for query execution
+	DebounceMs         int                // Debounce delay in milliseconds (default: 200ms)
 
 	// Conditional visibility
 	// VisibleWhen determines if this field is visible based on current form values.

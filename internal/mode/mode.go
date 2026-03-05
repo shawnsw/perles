@@ -4,14 +4,13 @@ package mode
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/flags"
 	appgit "github.com/zjrosen/perles/internal/git/application"
 	"github.com/zjrosen/perles/internal/mode/shared"
 	domain "github.com/zjrosen/perles/internal/sessions/domain"
 	"github.com/zjrosen/perles/internal/sound"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 )
 
@@ -47,25 +46,23 @@ type Controller interface {
 	SetSize(width, height int) Controller
 }
 
-// BeadsClient combines version and comment reading for mode controllers.
-type BeadsClient interface {
-	appbeads.VersionReader
-	appbeads.CommentReader
-}
-
 // Services contains shared dependencies injected into mode controllers.
 type Services struct {
-	Client        BeadsClient
-	Executor      bql.BQLExecutor
-	BeadsExecutor appbeads.IssueExecutor // Executor for BD CLI commands (with proper BEADS_DIR)
-	Config        *config.Config
-	ConfigPath    string
-	DBPath        string
-	WorkDir       string // Application root directory (where perles was invoked)
-	Clipboard     shared.Clipboard
-	Clock         shared.Clock
-	Flags         *flags.Registry
-	Sounds        sound.SoundService
+	// Backend-agnostic interfaces
+	TaskExecutor      task.TaskExecutor
+	QueryExecutor     task.QueryExecutor
+	QueryHelpers      task.QueryHelpers        // optional, nil if backend has no structured query language
+	SyntaxHighlighter task.SyntaxHighlighter   // optional, nil if backend has no query syntax highlighting
+	Capabilities      task.BackendCapabilities // what the current backend supports
+
+	Config     *config.Config
+	ConfigPath string
+	DBPath     string
+	WorkDir    string // Application root directory (where perles was invoked)
+	Clipboard  shared.Clipboard
+	Clock      shared.Clock
+	Flags      *flags.Registry
+	Sounds     sound.SoundService
 	// GitExecutorFactory creates git executors for a given path.
 	// Used by orchestration mode to check uncommitted changes in worktrees.
 	GitExecutorFactory func(path string) appgit.GitExecutor

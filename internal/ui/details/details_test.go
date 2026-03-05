@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mocks"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // stripANSI removes ANSI escape codes from a string for easier testing.
@@ -23,31 +23,31 @@ func stripANSI(s string) string {
 	return ansiRegex.ReplaceAllString(s, "")
 }
 
-func createTestModel(t *testing.T, issue beads.Issue) Model {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+func createTestModel(t *testing.T, issue task.Issue) Model {
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).
-		Return([]beads.Comment{}, nil)
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).
+		Return([]task.Comment{}, nil)
 
-	return New(issue, mockExecutor, mockClient)
+	return New(issue, mockExecutor, nil, mockTaskExec)
 }
 
 func TestDetails_New(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityHigh,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityHigh,
+		Status:    task.StatusOpen,
 	}
 	m := createTestModel(t, issue)
 	require.Equal(t, "test-1", m.issue.ID)
 }
 
 func TestDetails_SetSize(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 	}
@@ -60,7 +60,7 @@ func TestDetails_SetSize(t *testing.T) {
 }
 
 func TestDetails_View_NotReady(t *testing.T) {
-	issue := beads.Issue{ID: "test-1", TitleText: "Test"}
+	issue := task.Issue{ID: "test-1", TitleText: "Test"}
 	m := createTestModel(t, issue)
 	// Without SetSize, ready is false
 	view := m.View()
@@ -68,12 +68,12 @@ func TestDetails_View_NotReady(t *testing.T) {
 }
 
 func TestDetails_View_Ready(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityHigh,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityHigh,
+		Status:    task.StatusOpen,
 		CreatedAt: time.Now(),
 	}
 	m := createTestModel(t, issue)
@@ -85,7 +85,7 @@ func TestDetails_View_Ready(t *testing.T) {
 }
 
 func TestDetails_View_WithDescription(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: "This is a detailed description",
@@ -101,7 +101,7 @@ func TestDetails_View_WithDescription(t *testing.T) {
 }
 
 func TestDetails_View_WithExtraFields(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:                 "test-1",
 		TitleText:          "Test Issue",
 		DescriptionText:    "Description content",
@@ -125,7 +125,7 @@ func TestDetails_View_WithExtraFields(t *testing.T) {
 }
 
 func TestDetails_View_WithNoExtraFields(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:                 "test-1",
 		TitleText:          "Test Issue",
 		DescriptionText:    "Description content",
@@ -149,7 +149,7 @@ func TestDetails_View_WithNoExtraFields(t *testing.T) {
 }
 
 func TestDetails_View_WithDependencies(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		BlockedBy: []string{"blocker-1", "blocker-2"},
@@ -167,7 +167,7 @@ func TestDetails_View_WithDependencies(t *testing.T) {
 }
 
 func TestDetails_View_WithLabels(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		Labels:    []string{"bug", "urgent"},
@@ -183,7 +183,7 @@ func TestDetails_View_WithLabels(t *testing.T) {
 }
 
 func TestDetails_Update_ScrollDown(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -198,7 +198,7 @@ func TestDetails_Update_ScrollDown(t *testing.T) {
 }
 
 func TestDetails_Update_ScrollUp(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -218,7 +218,7 @@ func TestDetails_Update_ScrollUp(t *testing.T) {
 }
 
 func TestDetails_Update_GotoTop(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -237,7 +237,7 @@ func TestDetails_Update_GotoTop(t *testing.T) {
 }
 
 func TestDetails_Update_GotoBottom(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -253,7 +253,7 @@ func TestDetails_Update_GotoBottom(t *testing.T) {
 }
 
 func TestDetails_SetSize_TwiceUpdatesViewport(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		CreatedAt: time.Now(),
@@ -267,16 +267,16 @@ func TestDetails_SetSize_TwiceUpdatesViewport(t *testing.T) {
 }
 
 func TestDetails_View_AllTypes(t *testing.T) {
-	types := []beads.IssueType{
-		beads.TypeBug,
-		beads.TypeFeature,
-		beads.TypeTask,
-		beads.TypeEpic,
-		beads.TypeChore,
+	types := []task.IssueType{
+		task.TypeBug,
+		task.TypeFeature,
+		task.TypeTask,
+		task.TypeEpic,
+		task.TypeChore,
 	}
 
 	for _, issueType := range types {
-		issue := beads.Issue{
+		issue := task.Issue{
 			ID:        "test-1",
 			TitleText: "Test",
 			Type:      issueType,
@@ -290,16 +290,16 @@ func TestDetails_View_AllTypes(t *testing.T) {
 }
 
 func TestDetails_View_AllPriorities(t *testing.T) {
-	priorities := []beads.Priority{
-		beads.PriorityCritical,
-		beads.PriorityHigh,
-		beads.PriorityMedium,
-		beads.PriorityLow,
-		beads.PriorityBacklog,
+	priorities := []task.Priority{
+		task.PriorityCritical,
+		task.PriorityHigh,
+		task.PriorityMedium,
+		task.PriorityLow,
+		task.PriorityBacklog,
 	}
 
 	for _, priority := range priorities {
-		issue := beads.Issue{
+		issue := task.Issue{
 			ID:        "test-1",
 			TitleText: "Test",
 			Priority:  priority,
@@ -314,7 +314,7 @@ func TestDetails_View_AllPriorities(t *testing.T) {
 
 func TestDetails_View_MarkdownDescription(t *testing.T) {
 	// Test that markdown content is rendered (content preserved)
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: "# Heading\n\nThis is **bold** and *italic* text.\n\n- Item 1\n- Item 2",
@@ -332,7 +332,7 @@ func TestDetails_View_MarkdownDescription(t *testing.T) {
 }
 
 func TestDetails_View_MarkdownCodeBlock(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: "```go\nfunc example() {\n    return\n}\n```",
@@ -349,7 +349,7 @@ func TestDetails_View_MarkdownCodeBlock(t *testing.T) {
 }
 
 func TestDetails_RendererInitialization(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test",
 		DescriptionText: "Some content",
@@ -367,12 +367,12 @@ func TestDetails_RendererInitialization(t *testing.T) {
 }
 
 func TestDetails_SingleColumnFallback(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityHigh,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityHigh,
+		Status:    task.StatusOpen,
 		Labels:    []string{"test-label"},
 		CreatedAt: time.Now(),
 	}
@@ -388,12 +388,12 @@ func TestDetails_SingleColumnFallback(t *testing.T) {
 }
 
 func TestDetails_TwoColumnLayout(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityHigh,
-		Status:    beads.StatusOpen,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityHigh,
+		Status:    task.StatusOpen,
 		Labels:    []string{"test-label"},
 		CreatedAt: time.Now(),
 	}
@@ -413,7 +413,7 @@ func TestDetails_TwoColumnLayout(t *testing.T) {
 }
 
 func TestDetails_EmptyDescription(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		CreatedAt: time.Now(),
@@ -427,7 +427,7 @@ func TestDetails_EmptyDescription(t *testing.T) {
 }
 
 func TestDetails_NoLabels(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		Labels:    []string{},
@@ -442,7 +442,7 @@ func TestDetails_NoLabels(t *testing.T) {
 }
 
 func TestDetails_ManyLabels(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		Labels:    []string{"label1", "label2", "label3", "label4", "label5"},
@@ -459,7 +459,7 @@ func TestDetails_ManyLabels(t *testing.T) {
 }
 
 func TestDetails_LongDependencyList(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		BlockedBy: []string{"dep-1", "dep-2", "dep-3", "dep-4", "dep-5"},
@@ -476,11 +476,11 @@ func TestDetails_LongDependencyList(t *testing.T) {
 }
 
 func TestDetails_TerminalResize(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityHigh,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityHigh,
 		DescriptionText: "Some description content",
 		Labels:          []string{"test"},
 		CreatedAt:       time.Now(),
@@ -506,7 +506,7 @@ func TestDetails_TerminalResize(t *testing.T) {
 // Tests for scrolling behavior
 
 func TestDetails_JKScrollsViewport(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -525,7 +525,7 @@ func TestDetails_JKScrollsViewport(t *testing.T) {
 }
 
 func TestDetails_MouseScrollDown(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -540,7 +540,7 @@ func TestDetails_MouseScrollDown(t *testing.T) {
 }
 
 func TestDetails_MouseScrollUp(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -560,7 +560,7 @@ func TestDetails_MouseScrollUp(t *testing.T) {
 }
 
 func TestDetails_MouseScrollBoundaryTop(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -576,7 +576,7 @@ func TestDetails_MouseScrollBoundaryTop(t *testing.T) {
 }
 
 func TestDetails_MouseScrollBoundaryBottom(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -595,7 +595,7 @@ func TestDetails_MouseScrollBoundaryBottom(t *testing.T) {
 }
 
 func TestDetails_MouseIgnoresNonWheelEvents(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -620,7 +620,7 @@ func TestDetails_MouseIgnoresNonWheelEvents(t *testing.T) {
 }
 
 func TestDetails_DependencyNavigation_LToFocusDeps(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		BlockedBy: []string{"dep-1", "dep-2", "dep-3"},
@@ -655,7 +655,7 @@ func TestDetails_DependencyNavigation_LToFocusDeps(t *testing.T) {
 }
 
 func TestDetails_DependencyNavigation_EnterNavigates(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		BlockedBy: []string{"target-dep"},
@@ -680,7 +680,7 @@ func TestDetails_DependencyNavigation_EnterNavigates(t *testing.T) {
 }
 
 func TestDetails_DependencyNavigation_EnterNoOpOnContentPane(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		BlockedBy: []string{"dep-1"},
@@ -698,7 +698,7 @@ func TestDetails_DependencyNavigation_EnterNoOpOnContentPane(t *testing.T) {
 }
 
 func TestDetails_DependencyNavigation_LNoOpWithoutDeps(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		// No dependencies
@@ -721,7 +721,7 @@ func TestDetails_DependencyNavigation_MixedCategories_CorrectOrder(t *testing.T)
 	// Create issue with multiple dependency categories
 	// The render order is: blocked_by, blocks, children, related
 	// So visually: blocker-1, blocker-2, child-1, child-2, child-3
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		Children:  []string{"child-1", "child-2", "child-3"},
@@ -773,10 +773,10 @@ func TestDetails_DependencyNavigation_MixedCategories_CorrectOrder(t *testing.T)
 }
 
 func TestDetails_DeleteKey_EmitsDeleteIssueMsg(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
-		Type:      beads.TypeTask,
+		Type:      task.TypeTask,
 		CreatedAt: time.Now(),
 	}
 	m := createTestModel(t, issue)
@@ -791,14 +791,14 @@ func TestDetails_DeleteKey_EmitsDeleteIssueMsg(t *testing.T) {
 	deleteMsg, ok := msg.(DeleteIssueMsg)
 	require.True(t, ok, "expected DeleteIssueMsg")
 	require.Equal(t, "test-1", deleteMsg.IssueID)
-	require.Equal(t, beads.TypeTask, deleteMsg.IssueType)
+	require.Equal(t, task.TypeTask, deleteMsg.IssueType)
 }
 
 func TestDetails_DeleteKey_EpicType(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "epic-1",
 		TitleText: "Epic Issue",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		CreatedAt: time.Now(),
 	}
 	m := createTestModel(t, issue)
@@ -811,11 +811,11 @@ func TestDetails_DeleteKey_EpicType(t *testing.T) {
 	deleteMsg, ok := msg.(DeleteIssueMsg)
 	require.True(t, ok, "expected DeleteIssueMsg")
 	require.Equal(t, "epic-1", deleteMsg.IssueID)
-	require.Equal(t, beads.TypeEpic, deleteMsg.IssueType, "expected epic type for cascade handling")
+	require.Equal(t, task.TypeEpic, deleteMsg.IssueType, "expected epic type for cascade handling")
 }
 
 func TestDetails_FooterShowsDeleteKeybinding(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-1",
 		TitleText: "Test Issue",
 		CreatedAt: time.Now(),
@@ -830,13 +830,13 @@ func TestDetails_FooterShowsDeleteKeybinding(t *testing.T) {
 // TestDetails_View_Golden uses teatest golden file comparison.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-123",
 		TitleText:       "Test Issue Title",
 		DescriptionText: "This is the issue description.\n\nIt has multiple paragraphs.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityHigh,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityHigh,
+		Status:          task.StatusOpen,
 		Labels:          []string{"backend", "urgent"},
 		CreatedAt:       time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 		UpdatedAt:       time.Date(2024, 1, 20, 14, 45, 0, 0, time.UTC),
@@ -850,13 +850,13 @@ func TestDetails_View_Golden(t *testing.T) {
 // TestDetails_View_Golden_WithDependencies tests rendering with blocked_by and blocks.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithDependencies(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "epic-456",
 		TitleText:       "Epic with Dependencies",
 		DescriptionText: "This epic has both blockers and downstream dependencies.",
-		Type:            beads.TypeEpic,
-		Priority:        beads.PriorityCritical,
-		Status:          beads.StatusInProgress,
+		Type:            task.TypeEpic,
+		Priority:        task.PriorityCritical,
+		Status:          task.StatusInProgress,
 		Labels:          []string{"ui", "phase-2"},
 		BlockedBy:       []string{"task-100", "task-101"},
 		Blocks:          []string{"task-200", "task-201", "task-202"},
@@ -873,48 +873,50 @@ func TestDetails_View_Golden_WithDependencies(t *testing.T) {
 // Uses MockBQLExecutor to provide full issue details for dependencies.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithLoadedDependencies(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
 		{
 			ID:        "bug-101",
 			TitleText: "Critical login failure",
-			Type:      beads.TypeBug,
-			Priority:  beads.PriorityCritical,
-			Status:    beads.StatusOpen,
+			Type:      task.TypeBug,
+			Priority:  task.PriorityCritical,
+			Status:    task.StatusOpen,
 		},
 		{
 			ID:        "task-201",
 			TitleText: "Update documentation",
-			Type:      beads.TypeTask,
-			Priority:  beads.PriorityLow,
-			Status:    beads.StatusOpen,
+			Type:      task.TypeTask,
+			Priority:  task.PriorityLow,
+			Status:    task.StatusOpen,
 		},
 		{
 			ID:        "feature-301",
 			TitleText: "New dashboard widget",
-			Type:      beads.TypeFeature,
-			Priority:  beads.PriorityHigh,
-			Status:    beads.StatusInProgress,
+			Type:      task.TypeFeature,
+			Priority:  task.PriorityHigh,
+			Status:    task.StatusInProgress,
 		},
 	}, nil)
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).
-		Return([]beads.Comment{}, nil)
+	mockTaskExec2 := mocks.NewMockTaskExecutor(t)
+	mockTaskExec2.EXPECT().GetComments(mock.Anything).
+		Return([]task.Comment{}, nil)
 
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "task-500",
 		TitleText:       "Integration task",
 		DescriptionText: "This task shows fully loaded dependency rendering.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		BlockedBy:       []string{"bug-101"},
 		Blocks:          []string{"task-201", "feature-301"},
 		Children:        []string{"task-201", "feature-301"},
 		CreatedAt:       time.Date(2024, 3, 1, 10, 0, 0, 0, time.UTC),
 	}
-	m := New(issue, mockExecutor, mockClient).SetSize(120, 30)
+	mockHelpers := mocks.NewMockQueryHelpers(t)
+	mockHelpers.EXPECT().BuildIDQuery(mock.Anything).Return(`id in ("bug-101", "task-201", "feature-301")`)
+	m := New(issue, mockExecutor, mockHelpers, mockTaskExec2).SetSize(120, 30)
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -923,13 +925,13 @@ func TestDetails_View_Golden_WithLoadedDependencies(t *testing.T) {
 // TestDetails_View_Golden_Wide tests wide two-column layout with footer visible.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_Wide(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "wide-test",
 		TitleText:       "Wide Layout Test Issue",
 		DescriptionText: "Testing that footer is visible in wide two-column layout.",
-		Type:            beads.TypeFeature,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeFeature,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		Labels:          []string{"test"},
 		CreatedAt:       time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
@@ -942,13 +944,13 @@ func TestDetails_View_Golden_Wide(t *testing.T) {
 // TestDetails_View_Golden_WrappingTitle tests that divider is continuous when title wraps.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WrappingTitle(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "wrap-test",
 		TitleText:       "This is a very long title that should wrap to multiple lines in the two-column layout to test divider continuity",
 		DescriptionText: "Short description.",
-		Type:            beads.TypeBug,
-		Priority:        beads.PriorityHigh,
-		Status:          beads.StatusInProgress,
+		Type:            task.TypeBug,
+		Priority:        task.PriorityHigh,
+		Status:          task.StatusInProgress,
 		CreatedAt:       time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
 	m := createTestModel(t, issue).SetSize(180, 25)
@@ -960,13 +962,13 @@ func TestDetails_View_Golden_WrappingTitle(t *testing.T) {
 // TestDetails_View_Golden_WithAssignee tests rendering with assignee field populated.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithAssignee(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "assigned-task",
 		TitleText:       "Task with Assignee",
 		DescriptionText: "This task is assigned to a specific user.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityHigh,
-		Status:          beads.StatusInProgress,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityHigh,
+		Status:          task.StatusInProgress,
 		Assignee:        "coding-agent",
 		Labels:          []string{"wip"},
 		CreatedAt:       time.Date(2024, 4, 1, 9, 0, 0, 0, time.UTC),
@@ -982,13 +984,13 @@ func TestDetails_View_Golden_WithAssignee(t *testing.T) {
 // that could potentially wrap into the main view area when the panel is narrow.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithLongAssignee(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "long-assignee-task",
 		TitleText:       "Task with Long Assignee",
 		DescriptionText: "This task has an assignee with a very long name that should be truncated.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityHigh,
-		Status:          beads.StatusInProgress,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityHigh,
+		Status:          task.StatusInProgress,
 		Assignee:        "perles/polecats/furiosa/very-long-assignee-name",
 		Labels:          []string{"wip"},
 		CreatedAt:       time.Date(2024, 4, 1, 9, 0, 0, 0, time.UTC),
@@ -1007,8 +1009,8 @@ func TestDetails_View_Golden_WithLongAssignee(t *testing.T) {
 // Uses MockCommentLoader to provide comments for the issue.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithComments(t *testing.T) {
-	commentLoader := mocks.NewMockBeadsClient(t)
-	commentLoader.EXPECT().GetComments("commented-task").Return([]beads.Comment{
+	commentLoader := mocks.NewMockTaskExecutor(t)
+	commentLoader.EXPECT().GetComments("commented-task").Return([]task.Comment{
 		{
 			ID:        1,
 			Author:    "alice",
@@ -1023,16 +1025,16 @@ func TestDetails_View_Golden_WithComments(t *testing.T) {
 		},
 	}, nil)
 
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "commented-task",
 		TitleText:       "Task with Comments",
 		DescriptionText: "This task has comments below the description.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		CreatedAt:       time.Date(2024, 4, 1, 9, 0, 0, 0, time.UTC),
 	}
-	m := New(issue, nil, commentLoader).SetSize(120, 30)
+	m := New(issue, nil, nil, commentLoader).SetSize(120, 30)
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -1041,8 +1043,8 @@ func TestDetails_View_Golden_WithComments(t *testing.T) {
 // TestDetails_View_Golden_WithAssigneeAndComments tests rendering with both assignee and comments.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithAssigneeAndComments(t *testing.T) {
-	commentLoader := mocks.NewMockBeadsClient(t)
-	commentLoader.EXPECT().GetComments("full-task").Return([]beads.Comment{
+	commentLoader := mocks.NewMockTaskExecutor(t)
+	commentLoader.EXPECT().GetComments("full-task").Return([]task.Comment{
 		{
 			ID:        1,
 			Author:    "code-reviewer",
@@ -1051,19 +1053,19 @@ func TestDetails_View_Golden_WithAssigneeAndComments(t *testing.T) {
 		},
 	}, nil)
 
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "full-task",
 		TitleText:       "Complete Task with All Fields",
 		DescriptionText: "This task demonstrates all metadata: assignee, comments, labels, and timestamps.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityCritical,
-		Status:          beads.StatusClosed,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityCritical,
+		Status:          task.StatusClosed,
 		Assignee:        "coding-agent",
 		Labels:          []string{"reviewed", "approved"},
 		CreatedAt:       time.Date(2024, 4, 1, 9, 0, 0, 0, time.UTC),
 		UpdatedAt:       time.Date(2024, 4, 3, 17, 0, 0, 0, time.UTC),
 	}
-	m := New(issue, nil, commentLoader).SetSize(120, 30)
+	m := New(issue, nil, nil, commentLoader).SetSize(120, 30)
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -1072,8 +1074,8 @@ func TestDetails_View_Golden_WithAssigneeAndComments(t *testing.T) {
 // TestDetails_View_Golden_WithLongComment tests that long comments wrap correctly.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithLongComment(t *testing.T) {
-	commentLoader := mocks.NewMockBeadsClient(t)
-	commentLoader.EXPECT().GetComments("long-comment-task").Return([]beads.Comment{
+	commentLoader := mocks.NewMockTaskExecutor(t)
+	commentLoader.EXPECT().GetComments("long-comment-task").Return([]task.Comment{
 		{
 			ID:        1,
 			Author:    "reviewer",
@@ -1082,16 +1084,16 @@ func TestDetails_View_Golden_WithLongComment(t *testing.T) {
 		},
 	}, nil)
 
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "long-comment-task",
 		TitleText:       "Task with Long Comment",
 		DescriptionText: "Testing comment text wrapping.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		CreatedAt:       time.Date(2024, 4, 5, 9, 0, 0, 0, time.UTC),
 	}
-	m := New(issue, nil, commentLoader).SetSize(120, 30)
+	m := New(issue, nil, nil, commentLoader).SetSize(120, 30)
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -1100,19 +1102,19 @@ func TestDetails_View_Golden_WithLongComment(t *testing.T) {
 // TestDetails_View_Golden_WithCommentsError tests that error message is shown when comments fail to load.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithCommentsError(t *testing.T) {
-	commentLoader := mocks.NewMockBeadsClient(t)
+	commentLoader := mocks.NewMockTaskExecutor(t)
 	commentLoader.EXPECT().GetComments("error-task").Return(nil, errors.New("database connection failed"))
 
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "error-task",
 		TitleText:       "Task with Comments Error",
 		DescriptionText: "This task should show an error message for comments.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		CreatedAt:       time.Date(2024, 4, 10, 9, 0, 0, 0, time.UTC),
 	}
-	m := New(issue, nil, commentLoader).SetSize(120, 30)
+	m := New(issue, nil, nil, commentLoader).SetSize(120, 30)
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -1121,13 +1123,13 @@ func TestDetails_View_Golden_WithCommentsError(t *testing.T) {
 // TestDetails_View_Golden_WithExtraFields tests rendering with acceptance criteria, design, and notes fields.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithExtraFields(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:                 "extra-fields-task",
 		TitleText:          "Task with Extra Fields",
 		DescriptionText:    "This task demonstrates the extra fields: acceptance criteria, design, and notes.",
-		Type:               beads.TypeFeature,
-		Priority:           beads.PriorityHigh,
-		Status:             beads.StatusOpen,
+		Type:               task.TypeFeature,
+		Priority:           task.PriorityHigh,
+		Status:             task.StatusOpen,
 		AcceptanceCriteria: "- [ ] Users can log in with email/password\n- [ ] Users can reset password via email\n- [ ] Session expires after 24 hours",
 		Design:             "See design doc at: https://example.com/design/auth-flow",
 		Notes:              "This feature requires coordination with the backend team.\nTarget release: v2.0",
@@ -1144,13 +1146,13 @@ func TestDetails_View_Golden_WithExtraFields(t *testing.T) {
 // TestDetails_View_Golden_NoExtraFields tests that section headers don't render when extra fields are empty.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_NoExtraFields(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "no-extra-task",
 		TitleText:       "Task without Extra Fields",
 		DescriptionText: "This task has no acceptance criteria, design, or notes fields.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		// AcceptanceCriteria, Design, Notes are all empty
 		Labels:    []string{"simple"},
 		CreatedAt: time.Date(2024, 5, 10, 9, 0, 0, 0, time.UTC),
@@ -1164,13 +1166,13 @@ func TestDetails_View_Golden_NoExtraFields(t *testing.T) {
 // TestDetails_View_Golden_WithClosedAt tests rendering with Closed timestamp and Duration.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_WithClosedAt(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "closed-task",
 		TitleText:       "Completed Task with Duration",
 		DescriptionText: "This closed task shows the Closed timestamp and Duration fields.",
-		Type:            beads.TypeTask,
-		Priority:        beads.PriorityHigh,
-		Status:          beads.StatusClosed,
+		Type:            task.TypeTask,
+		Priority:        task.PriorityHigh,
+		Status:          task.StatusClosed,
 		Labels:          []string{"done"},
 		CreatedAt:       time.Date(2024, 6, 1, 9, 0, 0, 0, time.UTC),
 		UpdatedAt:       time.Date(2024, 6, 3, 14, 30, 0, 0, time.UTC),
@@ -1240,7 +1242,7 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestDetails_YOffset_GetterSetter(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100), // Lots of content to enable scrolling
@@ -1272,7 +1274,7 @@ func TestDetails_YOffset_GetterSetter(t *testing.T) {
 
 func TestDetails_SetSize_PreservesScroll(t *testing.T) {
 	// Create issue with enough content to scroll
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Long content line\n", 100),
@@ -1294,7 +1296,7 @@ func TestDetails_SetSize_PreservesScroll(t *testing.T) {
 
 func TestDetails_SetSize_InitializedAtTop(t *testing.T) {
 	// Create issue with long content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: strings.Repeat("Line\n", 50),
@@ -1310,13 +1312,13 @@ func TestDetails_SetSize_InitializedAtTop(t *testing.T) {
 // This is a regression test for labels overflowing into the left content column.
 // Run with -update flag to update golden files: go test -update ./internal/ui/details/...
 func TestDetails_View_Golden_LongLabels(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "sesh-r3z",
 		TitleText:       "Spec: Embed Children in Session List",
 		DescriptionText: "## Overview\n\nAdd `--include-children` flag to `session:list`.",
-		Type:            beads.TypeFeature,
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Type:            task.TypeFeature,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		// Labels longer than metadataColWidth (34) minus indent (2) = 32 chars available
 		// "spec:018-embed-children-list" is 28 chars - fits
 		// "very-long-label-that-exceeds-column-bounds" is 42 chars - should wrap

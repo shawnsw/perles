@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/styles"
 	"github.com/zjrosen/perles/internal/ui/tree"
 
@@ -22,7 +21,7 @@ type TreeColumn struct {
 	rootID      string        // Root issue ID for the tree
 	mode        tree.TreeMode // ModeDeps or ModeChildren
 	color       lipgloss.TerminalColor
-	executor    bql.BQLExecutor
+	executor    task.QueryExecutor
 	clock       shared.Clock // Clock for timestamp formatting
 	width       int
 	height      int
@@ -33,18 +32,18 @@ type TreeColumn struct {
 
 // TreeColumnLoadedMsg is sent when a tree column finishes loading its data.
 type TreeColumnLoadedMsg struct {
-	ViewIndex   int                     // which view this column belongs to
-	ColumnIndex int                     // which column within the view
-	ColumnTitle string                  // kept for debugging/logging
-	RootID      string                  // the root issue ID
-	Issues      []beads.Issue           // loaded issues (nil if error)
-	IssueMap    map[string]*beads.Issue // indexed issues for tree building
-	Err         error                   // error if load failed
+	ViewIndex   int                    // which view this column belongs to
+	ColumnIndex int                    // which column within the view
+	ColumnTitle string                 // kept for debugging/logging
+	RootID      string                 // the root issue ID
+	Issues      []task.Issue           // loaded issues (nil if error)
+	IssueMap    map[string]*task.Issue // indexed issues for tree building
+	Err         error                  // error if load failed
 }
 
 // NewTreeColumn creates a new tree column.
 // treeMode can be "deps" (default) or "child".
-func NewTreeColumn(title, rootID, treeMode string, executor bql.BQLExecutor, clock shared.Clock) TreeColumn {
+func NewTreeColumn(title, rootID, treeMode string, executor task.QueryExecutor, clock shared.Clock) TreeColumn {
 	focused := new(bool)
 
 	// Convert string mode to tree.TreeMode
@@ -196,7 +195,7 @@ func (c TreeColumn) LoadCmd(viewIndex, columnIndex int) tea.Cmd {
 		}
 
 		// Build issue map for tree construction
-		issueMap := make(map[string]*beads.Issue, len(issues))
+		issueMap := make(map[string]*task.Issue, len(issues))
 		for i := range issues {
 			issueMap[issues[i].ID] = &issues[i]
 		}
@@ -254,7 +253,7 @@ func (c TreeColumn) HandleLoaded(msg tea.Msg) BoardColumn {
 }
 
 // SelectedIssue returns the currently selected tree node's issue.
-func (c TreeColumn) SelectedIssue() *beads.Issue {
+func (c TreeColumn) SelectedIssue() *task.Issue {
 	if c.tree == nil {
 		return nil
 	}

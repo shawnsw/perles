@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -33,42 +33,42 @@ func stripANSI(s string) string {
 func TestRenderBadge_IssueTypes(t *testing.T) {
 	tests := []struct {
 		name         string
-		issueType    beads.IssueType
+		issueType    task.IssueType
 		wantContains string
 	}{
 		{
 			name:         "epic",
-			issueType:    beads.TypeEpic,
+			issueType:    task.TypeEpic,
 			wantContains: "[E]",
 		},
 		{
 			name:         "task",
-			issueType:    beads.TypeTask,
+			issueType:    task.TypeTask,
 			wantContains: "[T]",
 		},
 		{
 			name:         "feature",
-			issueType:    beads.TypeFeature,
+			issueType:    task.TypeFeature,
 			wantContains: "[F]",
 		},
 		{
 			name:         "bug",
-			issueType:    beads.TypeBug,
+			issueType:    task.TypeBug,
 			wantContains: "[B]",
 		},
 		{
 			name:         "chore",
-			issueType:    beads.TypeChore,
+			issueType:    task.TypeChore,
 			wantContains: "[C]",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			issue := beads.Issue{
+			issue := task.Issue{
 				ID:        "test-123",
 				Type:      tt.issueType,
-				Priority:  beads.PriorityMedium,
+				Priority:  task.PriorityMedium,
 				TitleText: "Test issue",
 			}
 
@@ -83,41 +83,41 @@ func TestRenderBadge_IssueTypes(t *testing.T) {
 func TestRenderBadge_Priorities(t *testing.T) {
 	tests := []struct {
 		name         string
-		priority     beads.Priority
+		priority     task.Priority
 		wantContains string
 	}{
 		{
 			name:         "P0 critical",
-			priority:     beads.PriorityCritical,
+			priority:     task.PriorityCritical,
 			wantContains: "[P0]",
 		},
 		{
 			name:         "P1 high",
-			priority:     beads.PriorityHigh,
+			priority:     task.PriorityHigh,
 			wantContains: "[P1]",
 		},
 		{
 			name:         "P2 medium",
-			priority:     beads.PriorityMedium,
+			priority:     task.PriorityMedium,
 			wantContains: "[P2]",
 		},
 		{
 			name:         "P3 low",
-			priority:     beads.PriorityLow,
+			priority:     task.PriorityLow,
 			wantContains: "[P3]",
 		},
 		{
 			name:         "P4 backlog",
-			priority:     beads.PriorityBacklog,
+			priority:     task.PriorityBacklog,
 			wantContains: "[P4]",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			issue := beads.Issue{
+			issue := task.Issue{
 				ID:        "test-123",
-				Type:      beads.TypeTask,
+				Type:      task.TypeTask,
 				Priority:  tt.priority,
 				TitleText: "Test issue",
 			}
@@ -131,10 +131,10 @@ func TestRenderBadge_Priorities(t *testing.T) {
 }
 
 func TestRenderBadge_Format(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "abc-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Test issue",
 	}
 
@@ -149,10 +149,10 @@ func TestRenderBadge_Format(t *testing.T) {
 }
 
 func TestRender_IncludesTitle(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "My test title",
 	}
 
@@ -163,10 +163,10 @@ func TestRender_IncludesTitle(t *testing.T) {
 }
 
 func TestRender_SelectionIndicator(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Test issue",
 	}
 
@@ -204,10 +204,10 @@ func TestRender_SelectionIndicator(t *testing.T) {
 }
 
 func TestRender_TitleTruncation(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "id",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "This is a very long title that should be truncated",
 	}
 
@@ -232,10 +232,10 @@ func TestRender_TitleTruncation(t *testing.T) {
 }
 
 func TestRender_NoTruncationWhenFits(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "id",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Short",
 	}
 
@@ -251,10 +251,10 @@ func TestRender_NoTruncationWhenFits(t *testing.T) {
 }
 
 func TestRender_ZeroMaxWidthNoTruncation(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "This is a very long title that should not be truncated when MaxWidth is 0",
 	}
 
@@ -269,10 +269,10 @@ func TestRender_ZeroMaxWidthNoTruncation(t *testing.T) {
 // TestRenderBadge_Golden tests badge rendering with ANSI styles.
 // Run with -update flag to update golden files: go test ./internal/ui/shared/issuebadge -update
 func TestRenderBadge_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "abc-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Test issue",
 	}
 
@@ -282,10 +282,10 @@ func TestRenderBadge_Golden(t *testing.T) {
 
 // TestRenderBadge_Epic_Golden tests epic badge rendering.
 func TestRenderBadge_Epic_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:       "epic-42",
-		Type:     beads.TypeEpic,
-		Priority: beads.PriorityCritical,
+		Type:     task.TypeEpic,
+		Priority: task.PriorityCritical,
 	}
 
 	got := RenderBadge(issue)
@@ -294,10 +294,10 @@ func TestRenderBadge_Epic_Golden(t *testing.T) {
 
 // TestRenderBadge_Bug_Golden tests bug badge rendering.
 func TestRenderBadge_Bug_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:       "bug-99",
-		Type:     beads.TypeBug,
-		Priority: beads.PriorityHigh,
+		Type:     task.TypeBug,
+		Priority: task.PriorityHigh,
 	}
 
 	got := RenderBadge(issue)
@@ -306,10 +306,10 @@ func TestRenderBadge_Bug_Golden(t *testing.T) {
 
 // TestRender_Selected_Golden tests full render with selection indicator.
 func TestRender_Selected_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "task-1",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Implement feature X",
 	}
 
@@ -322,10 +322,10 @@ func TestRender_Selected_Golden(t *testing.T) {
 
 // TestRender_NotSelected_Golden tests full render without selection.
 func TestRender_NotSelected_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "task-1",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Implement feature X",
 	}
 
@@ -338,10 +338,10 @@ func TestRender_NotSelected_Golden(t *testing.T) {
 
 // TestRender_Truncated_Golden tests title truncation with MaxWidth.
 func TestRender_Truncated_Golden(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "id",
-		Type:      beads.TypeFeature,
-		Priority:  beads.PriorityLow,
+		Type:      task.TypeFeature,
+		Priority:  task.PriorityLow,
 		TitleText: "This is a very long title that should be truncated",
 	}
 
@@ -353,19 +353,14 @@ func TestRender_Truncated_Golden(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(got))
 }
 
-// boolPtr returns a pointer to the given bool value.
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 // TestRenderBadge_PinnedNil verifies no pin emoji when Pinned is nil (default).
 func TestRenderBadge_PinnedNil(t *testing.T) {
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-123",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
+		Type:      task.TypeTask,
+		Priority:  task.PriorityMedium,
 		TitleText: "Test issue",
-		Pinned:    nil, // explicitly nil
+		// No Extensions set — pinned absent
 	}
 
 	got := RenderBadge(issue)
@@ -379,12 +374,12 @@ func TestRenderBadge_PinnedNil(t *testing.T) {
 
 // TestRenderBadge_PinnedFalse verifies no pin emoji when Pinned is false.
 func TestRenderBadge_PinnedFalse(t *testing.T) {
-	issue := beads.Issue{
-		ID:        "test-456",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
-		TitleText: "Test issue",
-		Pinned:    boolPtr(false),
+	issue := task.Issue{
+		ID:         "test-456",
+		Type:       task.TypeTask,
+		Priority:   task.PriorityMedium,
+		TitleText:  "Test issue",
+		Extensions: map[string]any{"pinned": false},
 	}
 
 	got := RenderBadge(issue)
@@ -398,12 +393,12 @@ func TestRenderBadge_PinnedFalse(t *testing.T) {
 
 // TestRenderBadge_PinnedTrue verifies pin emoji appears when Pinned is true.
 func TestRenderBadge_PinnedTrue(t *testing.T) {
-	issue := beads.Issue{
-		ID:        "test-789",
-		Type:      beads.TypeTask,
-		Priority:  beads.PriorityMedium,
-		TitleText: "Test issue",
-		Pinned:    boolPtr(true),
+	issue := task.Issue{
+		ID:         "test-789",
+		Type:       task.TypeTask,
+		Priority:   task.PriorityMedium,
+		TitleText:  "Test issue",
+		Extensions: map[string]any{"pinned": true},
 	}
 
 	got := RenderBadge(issue)
@@ -420,11 +415,11 @@ func TestRenderBadge_PinnedTrue(t *testing.T) {
 
 // TestRenderBadge_Pinned_Golden captures exact ANSI output for pinned badge.
 func TestRenderBadge_Pinned_Golden(t *testing.T) {
-	issue := beads.Issue{
-		ID:       "pinned-1",
-		Type:     beads.TypeTask,
-		Priority: beads.PriorityHigh,
-		Pinned:   boolPtr(true),
+	issue := task.Issue{
+		ID:         "pinned-1",
+		Type:       task.TypeTask,
+		Priority:   task.PriorityHigh,
+		Extensions: map[string]any{"pinned": true},
 	}
 
 	got := RenderBadge(issue)

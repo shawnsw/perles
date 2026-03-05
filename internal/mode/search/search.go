@@ -14,13 +14,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/modals/help"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
@@ -69,7 +68,7 @@ type Model struct {
 
 	// List sub-mode (BQL search with flat results)
 	input         vimtextarea.Model
-	results       []beads.Issue
+	results       []task.Issue
 	resultsList   list.Model
 	selectedIdx   int
 	searchErr     error
@@ -77,8 +76,8 @@ type Model struct {
 	searchVersion int  // Incremented on each input change for debounce
 
 	// Tree sub-mode (issue ID with tree rendering)
-	tree     *tree.Model  // Tree rendering model (from internal/ui/tree)
-	treeRoot *beads.Issue // Root issue for header display
+	tree     *tree.Model // Tree rendering model (from internal/ui/tree)
+	treeRoot *task.Issue // Root issue for header display
 
 	// Detail panel
 	details   details.Model
@@ -88,7 +87,7 @@ type Model struct {
 	view          ViewMode
 	help          help.Model
 	picker        picker.Model
-	selectedIssue *beads.Issue // Issue being edited in picker
+	selectedIssue *task.Issue // Issue being edited in picker
 	viewSelector  formmodal.Model
 	newViewModal  formmodal.Model
 	modal         modal.Model
@@ -464,7 +463,11 @@ func New(services mode.Services) Model {
 	if services.Clipboard != nil {
 		input = input.SetClipboard(services.Clipboard)
 	}
-	input.SetLexer(bql.NewSyntaxLexer())
+	if services.SyntaxHighlighter != nil {
+		if lexer, ok := services.SyntaxHighlighter.NewSyntaxLexer().(vimtextarea.SyntaxLexer); ok {
+			input.SetLexer(lexer)
+		}
+	}
 	input.Focus()
 
 	// Configure results list with custom delegate
@@ -520,7 +523,7 @@ func (m Model) handleEnter(msg EnterMsg) (Model, tea.Cmd) {
 		m.subMode = mode.SubModeTree
 		m.focus = FocusResults // Focus tree panel
 		m.tree = nil           // Clear old tree so handleTreeLoaded doesn't preserve stale selection
-		m.treeRoot = &beads.Issue{ID: msg.IssueID}
+		m.treeRoot = &task.Issue{ID: msg.IssueID}
 		return m, m.loadTree(msg.IssueID)
 	}
 
@@ -1402,7 +1405,7 @@ func (m *Model) updateDetailPanel() {
 		}
 
 		// rightWidth-2 for left/right border, height-2 for top/bottom border
-		m.details = details.New(issue, m.services.Executor, m.services.Client).
+		m.details = details.New(issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 			SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
 			SetSize(rightWidth-2, m.height-2)
 
@@ -1437,7 +1440,7 @@ func (m *Model) updateDetailFromTree() {
 	}
 
 	// rightWidth-2 for left/right border, height-2 for top/bottom border
-	m.details = details.New(node.Issue, m.services.Executor, m.services.Client).
+	m.details = details.New(node.Issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
 		SetSize(rightWidth-2, m.height-2)
 
@@ -1589,7 +1592,7 @@ func (m Model) yankTreeIssueID() (Model, tea.Cmd) {
 }
 
 // getSelectedIssue returns a pointer to the currently selected issue, or nil if none.
-func (m Model) getSelectedIssue() *beads.Issue {
+func (m Model) getSelectedIssue() *task.Issue {
 	// Tree sub-mode: get selected node's issue
 	if m.subMode == mode.SubModeTree && m.tree != nil {
 		if node := m.tree.SelectedNode(); node != nil {
@@ -1609,7 +1612,7 @@ func (m Model) getSelectedIssue() *beads.Issue {
 // executeSearch runs the BQL query and returns results.
 func (m Model) executeSearch() tea.Cmd {
 	query := m.input.Value()
-	executor := m.services.Executor
+	executor := m.services.QueryExecutor
 
 	return func() tea.Msg {
 		start := time.Now()
@@ -1626,7 +1629,7 @@ func (m Model) executeSearch() tea.Cmd {
 
 // loadTree creates a command to load tree data for an issue.
 func (m Model) loadTree(rootID string) tea.Cmd {
-	executor := m.services.Executor
+	executor := m.services.QueryExecutor
 	dir := tree.DirectionDown
 	if m.tree != nil {
 		dir = m.tree.Direction()
@@ -1714,7 +1717,7 @@ func (m Model) handleTreeLoaded(msg treeLoadedMsg) (Model, tea.Cmd) {
 	}
 
 	// Find root issue
-	var root *beads.Issue
+	var root *task.Issue
 	for i := range msg.Issues {
 		if msg.Issues[i].ID == msg.RootID {
 			root = &msg.Issues[i]
@@ -1729,7 +1732,7 @@ func (m Model) handleTreeLoaded(msg treeLoadedMsg) (Model, tea.Cmd) {
 	}
 
 	// Build issue map for tree
-	issueMap := make(map[string]*beads.Issue, len(msg.Issues))
+	issueMap := make(map[string]*task.Issue, len(msg.Issues))
 	for i := range msg.Issues {
 		issueMap[msg.Issues[i].ID] = &msg.Issues[i]
 	}
@@ -1774,13 +1777,16 @@ func (m Model) handleTreeLoaded(msg treeLoadedMsg) (Model, tea.Cmd) {
 
 // navigateToDependency loads and displays a dependency issue in the details panel.
 func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
-	if m.services.Executor == nil {
+	if m.services.QueryExecutor == nil {
 		return m, nil
 	}
 
-	// Load the issue by ID using BQL executor
-	query := bql.BuildIDQuery([]string{issueID})
-	issues, err := m.services.Executor.Execute(query)
+	// Load the issue by ID using query executor
+	if m.services.QueryHelpers == nil {
+		return m, nil
+	}
+	query := m.services.QueryHelpers.BuildIDQuery([]string{issueID})
+	issues, err := m.services.QueryExecutor.Execute(query)
 	if err != nil || len(issues) == 0 {
 		return m, func() tea.Msg {
 			return mode.ShowToastMsg{Message: "Issue not found: " + issueID, Style: toaster.StyleError}
@@ -1792,7 +1798,7 @@ func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
 	// Update the details panel with this issue
 	rightWidth := m.width - (m.width / 2) - 1
 	// rightWidth-2 for left/right border, height-2 for top/bottom border
-	m.details = details.New(issue, m.services.Executor, m.services.Client).
+	m.details = details.New(issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
 		SetSize(rightWidth-2, m.height-2)
 	m.hasDetail = true
@@ -2011,13 +2017,13 @@ func (m Model) renderTreeLeftPanel(width int) string {
 
 // searchResultsMsg carries the results of a BQL query.
 type searchResultsMsg struct {
-	issues []beads.Issue
+	issues []task.Issue
 	err    error
 }
 
 // treeLoadedMsg carries the results of loading a tree for an issue.
 type treeLoadedMsg struct {
-	Issues []beads.Issue
+	Issues []task.Issue
 	RootID string
 	Err    error
 }
@@ -2025,7 +2031,7 @@ type treeLoadedMsg struct {
 // issueSavedMsg signals completion of a consolidated issue save.
 type issueSavedMsg struct {
 	issueID string
-	opts    beads.UpdateIssueOptions
+	opts    task.UpdateOptions
 	err     error
 }
 
@@ -2112,9 +2118,9 @@ func debounceSearch(version int, delay time.Duration) tea.Cmd {
 }
 
 // saveIssueCmd creates a command to save all changed fields via a single UpdateIssue call.
-func (m Model) saveIssueCmd(issueID string, opts beads.UpdateIssueOptions) tea.Cmd {
+func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 	return func() tea.Msg {
-		err := m.services.BeadsExecutor.UpdateIssue(issueID, opts)
+		err := m.services.TaskExecutor.UpdateIssue(issueID, opts)
 		return issueSavedMsg{issueID: issueID, opts: opts, err: err}
 	}
 }
@@ -2246,9 +2252,9 @@ func makeSearchTreeZoneID(issueID string) string {
 	return zoneSearchTreePrefix + issueID
 }
 
-// issueItem wraps beads.Issue for the list component.
+// issueItem wraps task.Issue for the list component.
 type issueItem struct {
-	issue beads.Issue
+	issue task.Issue
 }
 
 // FilterValue implements list.Item interface.
@@ -2349,7 +2355,7 @@ func (d issueDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 // openDeleteConfirm opens the delete confirmation modal.
 func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 	// Find the issue to delete
-	var issue *beads.Issue
+	var issue *task.Issue
 	for i := range m.results {
 		if m.results[i].ID == msg.IssueID {
 			issue = &m.results[i]
@@ -2358,9 +2364,9 @@ func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 	}
 	if issue == nil {
 		// Try loading from executor
-		if m.services.Executor != nil {
-			query := bql.BuildIDQuery([]string{msg.IssueID})
-			issues, err := m.services.Executor.Execute(query)
+		if m.services.QueryExecutor != nil && m.services.QueryHelpers != nil {
+			query := m.services.QueryHelpers.BuildIDQuery([]string{msg.IssueID})
+			issues, err := m.services.QueryExecutor.Execute(query)
 			if err == nil && len(issues) == 1 {
 				issue = &issues[0]
 			}
@@ -2370,7 +2376,7 @@ func (m Model) openDeleteConfirm(msg details.DeleteIssueMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.modal, m.deleteIssueIDs = shared.CreateDeleteModal(issue, m.services.Executor)
+	m.modal, m.deleteIssueIDs = shared.CreateDeleteModal(issue, m.services.QueryExecutor)
 	m.modal.SetSize(m.width, m.height)
 	m.selectedIssue = issue
 	m.view = ViewDeleteConfirm
@@ -2496,7 +2502,7 @@ func (m Model) deleteIssueCmd(issueIDs []string, parentID string, wasTreeRoot bo
 		if len(issueIDs) == 0 {
 			return issueDeletedMsg{parentID: parentID, wasTreeRoot: wasTreeRoot, err: nil}
 		}
-		err := m.services.BeadsExecutor.DeleteIssues(issueIDs)
+		err := m.services.TaskExecutor.DeleteIssues(issueIDs)
 		return issueDeletedMsg{
 			issueID:     issueIDs[0],
 			parentID:    parentID,

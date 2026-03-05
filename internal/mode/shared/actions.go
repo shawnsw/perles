@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/log"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // IssueContext provides template variables for user-defined actions.
@@ -23,7 +23,7 @@ type IssueContext struct {
 }
 
 // NewIssueContext creates an IssueContext from a beads Issue.
-func NewIssueContext(issue *beads.Issue) IssueContext {
+func NewIssueContext(issue *task.Issue) IssueContext {
 	if issue == nil {
 		return IssueContext{
 			ID:    "",
@@ -70,7 +70,7 @@ type ActionExecutedMsg struct {
 // ExecuteAction executes a user-defined action in fire-and-forget mode.
 // It renders the command template, starts the command, and returns immediately
 // without waiting for completion.
-func ExecuteAction(action config.ActionConfig, issue *beads.Issue, workDir string) tea.Cmd {
+func ExecuteAction(action config.ActionConfig, issue *task.Issue, workDir string) tea.Cmd {
 	return func() tea.Msg {
 		// Create issue context and render the command template
 		issueCtx := NewIssueContext(issue)

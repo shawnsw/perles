@@ -14,14 +14,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/tracing"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
 	"github.com/zjrosen/perles/internal/orchestration/v2/prompt"
 	"github.com/zjrosen/perles/internal/orchestration/v2/repository"
 	"github.com/zjrosen/perles/internal/orchestration/v2/types"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // ===========================================================================
@@ -35,7 +34,7 @@ type AssignTaskHandler struct {
 	processRepo repository.ProcessRepository
 	taskRepo    repository.TaskRepository
 	queueRepo   repository.QueueRepository
-	bdExecutor  appbeads.IssueExecutor
+	bdExecutor  taskpkg.TaskExecutor
 	tracer      trace.Tracer
 }
 
@@ -44,7 +43,7 @@ type AssignTaskHandlerOption func(*AssignTaskHandler)
 
 // WithBDExecutor sets the BD executor for task status updates.
 // Note: bdExecutor is required and must not be nil.
-func WithBDExecutor(executor appbeads.IssueExecutor) AssignTaskHandlerOption {
+func WithBDExecutor(executor taskpkg.TaskExecutor) AssignTaskHandlerOption {
 	return func(h *AssignTaskHandler) {
 		h.bdExecutor = executor
 	}
@@ -207,7 +206,7 @@ func (h *AssignTaskHandler) handleAssign(_ context.Context, assignCmd *command.A
 	}
 
 	// 8. Update bd task status to in_progress synchronously
-	if err := h.bdExecutor.UpdateStatus(assignCmd.TaskID, beads.StatusInProgress); err != nil {
+	if err := h.bdExecutor.UpdateStatus(assignCmd.TaskID, taskpkg.StatusInProgress); err != nil {
 		return nil, fmt.Errorf("failed to update BD task status: %w", err)
 	}
 

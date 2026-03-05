@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
@@ -33,9 +33,9 @@ func phasePtr(p events.ProcessPhase) *events.ProcessPhase {
 func TestAssignTaskHandler_AssignsToReadyWorker(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Add ready worker process
@@ -84,7 +84,7 @@ func TestAssignTaskHandler_AssignsToReadyWorker(t *testing.T) {
 func TestAssignTaskHandler_FailsIfWorkerNotReady(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	// Add working process
 	proc := &repository.Process{
@@ -109,7 +109,7 @@ func TestAssignTaskHandler_FailsIfWorkerNotReady(t *testing.T) {
 func TestAssignTaskHandler_FailsIfWorkerNotIdlePhase(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	// Add ready process but in non-idle phase
 	proc := &repository.Process{
@@ -134,7 +134,7 @@ func TestAssignTaskHandler_FailsIfWorkerNotIdlePhase(t *testing.T) {
 func TestAssignTaskHandler_FailsIfWorkerAlreadyHasTask(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	// Add ready process with existing task
 	proc := &repository.Process{
@@ -160,9 +160,9 @@ func TestAssignTaskHandler_FailsIfWorkerAlreadyHasTask(t *testing.T) {
 func TestAssignTaskHandler_FailsIfWorkerAlreadyImplementer(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for ShowIssue (called before the check that fails)
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 
 	// Add ready process
 	proc := &repository.Process{
@@ -196,9 +196,9 @@ func TestAssignTaskHandler_FailsIfWorkerAlreadyImplementer(t *testing.T) {
 func TestAssignTaskHandler_QueuesPromptAndCreatesDeliveryFollowUp(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	proc := &repository.Process{
@@ -240,9 +240,9 @@ func TestAssignTaskHandler_QueuesPromptAndCreatesDeliveryFollowUp(t *testing.T) 
 func TestAssignTaskHandler_CreatesTaskAssignment(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	proc := &repository.Process{
@@ -273,9 +273,9 @@ func TestAssignTaskHandler_CreatesTaskAssignment(t *testing.T) {
 func TestAssignTaskHandler_EmitsStatusChangeEvent(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	proc := &repository.Process{
@@ -311,7 +311,7 @@ func TestAssignTaskHandler_EmitsStatusChangeEvent(t *testing.T) {
 func TestAssignTaskHandler_FailsForUnknownWorker(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 
 	queueRepo := repository.NewMemoryQueueRepository(0)
 	handler := NewAssignTaskHandler(processRepo, taskRepo, WithBDExecutor(bdExecutor), WithQueueRepository(queueRepo))
@@ -326,9 +326,9 @@ func TestAssignTaskHandler_FailsForUnknownWorker(t *testing.T) {
 func TestAssignTaskHandler_ReturnsAssignTaskResult(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	proc := &repository.Process{
@@ -1046,9 +1046,9 @@ func TestApproveCommitHandler_ReturnsApproveCommitResult(t *testing.T) {
 func TestFullAssignReviewApproveWorkflow(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// Mock for AssignTaskHandler: ShowIssue and UpdateStatus
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil).Maybe()
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil).Maybe()
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Add two processes
@@ -1143,9 +1143,9 @@ func TestFullAssignReviewApproveWorkflow(t *testing.T) {
 func TestAssignTaskHandler_FailsOnBDError(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// ShowIssue must succeed before UpdateStatus fails
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-test123", Status: beads.StatusOpen}, nil)
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-test123", Status: taskpkg.StatusOpen}, nil)
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(errors.New("bd CLI connection failed"))
 
 	proc := &repository.Process{
@@ -1174,9 +1174,9 @@ func TestAssignTaskHandler_FailsOnBDError(t *testing.T) {
 func TestAssignTaskHandler_PropagatesBDError(t *testing.T) {
 	processRepo := repository.NewMemoryProcessRepository()
 	taskRepo := repository.NewMemoryTaskRepository()
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// ShowIssue must succeed before UpdateStatus fails
-	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&beads.Issue{ID: "perles-abc1.2", Status: beads.StatusOpen}, nil)
+	bdExecutor.EXPECT().ShowIssue(mock.Anything).Return(&taskpkg.Issue{ID: "perles-abc1.2", Status: taskpkg.StatusOpen}, nil)
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(errors.New("bd database locked"))
 
 	proc := &repository.Process{

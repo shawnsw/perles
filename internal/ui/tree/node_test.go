@@ -3,45 +3,20 @@ package tree
 import (
 	"testing"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 
 	"github.com/stretchr/testify/require"
 )
 
-// Helper to create test issues
-func makeIssue(id string, status beads.Status, children []string, blocks []string, blockedBy []string, parentID string) *beads.Issue {
-	return &beads.Issue{
-		ID:        id,
-		TitleText: "Issue " + id,
-		Status:    status,
-		Children:  children,
-		Blocks:    blocks,
-		BlockedBy: blockedBy,
-		ParentID:  parentID,
-	}
-}
-
-// Helper to create test issues with directional discovered-from fields
-func makeIssueWithDiscovered(id string, status beads.Status, children []string, blocks []string, blockedBy []string, discoveredFrom []string, discovered []string, parentID string) *beads.Issue {
-	return &beads.Issue{
-		ID:             id,
-		TitleText:      "Issue " + id,
-		Status:         status,
-		Children:       children,
-		Blocks:         blocks,
-		BlockedBy:      blockedBy,
-		DiscoveredFrom: discoveredFrom,
-		Discovered:     discovered,
-		ParentID:       parentID,
-	}
-}
+// bi is a shorthand for task.BuildIssuePtr to keep test issue map literals concise.
+var bi = task.BuildIssuePtr
 
 func TestBuildTree_Down_Basic(t *testing.T) {
 	// Epic -> Task1, Task2
-	issueMap := map[string]*beads.Issue{
-		"epic-1": makeIssue("epic-1", beads.StatusOpen, []string{"task-1", "task-2"}, nil, nil, ""),
-		"task-1": makeIssue("task-1", beads.StatusClosed, nil, nil, nil, "epic-1"),
-		"task-2": makeIssue("task-2", beads.StatusOpen, nil, nil, nil, "epic-1"),
+	issueMap := map[string]*task.Issue{
+		"epic-1": bi("epic-1", task.WithChildren("task-1", "task-2")),
+		"task-1": bi("task-1", task.WithStatus(task.StatusClosed), task.WithParentID("epic-1")),
+		"task-2": bi("task-2", task.WithParentID("epic-1")),
 	}
 
 	root, err := BuildTree(issueMap, "epic-1", DirectionDown, ModeDeps)
@@ -63,9 +38,9 @@ func TestBuildTree_Down_Basic(t *testing.T) {
 
 func TestBuildTree_Down_WithBlocks(t *testing.T) {
 	// Task blocks another task
-	issueMap := map[string]*beads.Issue{
-		"task-1": makeIssue("task-1", beads.StatusClosed, nil, []string{"task-2"}, nil, ""),
-		"task-2": makeIssue("task-2", beads.StatusOpen, nil, nil, []string{"task-1"}, ""),
+	issueMap := map[string]*task.Issue{
+		"task-1": bi("task-1", task.WithStatus(task.StatusClosed), task.WithBlocks("task-2")),
+		"task-2": bi("task-2", task.WithBlockedBy("task-1")),
 	}
 
 	root, err := BuildTree(issueMap, "task-1", DirectionDown, ModeDeps)
@@ -76,10 +51,10 @@ func TestBuildTree_Down_WithBlocks(t *testing.T) {
 
 func TestBuildTree_Down_Combined(t *testing.T) {
 	// Epic with children AND blocks
-	issueMap := map[string]*beads.Issue{
-		"epic-1":     makeIssue("epic-1", beads.StatusOpen, []string{"task-1"}, []string{"external-1"}, nil, ""),
-		"task-1":     makeIssue("task-1", beads.StatusOpen, nil, nil, nil, "epic-1"),
-		"external-1": makeIssue("external-1", beads.StatusOpen, nil, nil, []string{"epic-1"}, ""),
+	issueMap := map[string]*task.Issue{
+		"epic-1":     bi("epic-1", task.WithChildren("task-1"), task.WithBlocks("external-1")),
+		"task-1":     bi("task-1", task.WithParentID("epic-1")),
+		"external-1": bi("external-1", task.WithBlockedBy("epic-1")),
 	}
 
 	root, err := BuildTree(issueMap, "epic-1", DirectionDown, ModeDeps)
@@ -92,9 +67,9 @@ func TestBuildTree_Down_Combined(t *testing.T) {
 
 func TestBuildTree_Up_Basic(t *testing.T) {
 	// Task -> Parent epic
-	issueMap := map[string]*beads.Issue{
-		"epic-1": makeIssue("epic-1", beads.StatusOpen, []string{"task-1"}, nil, nil, ""),
-		"task-1": makeIssue("task-1", beads.StatusOpen, nil, nil, nil, "epic-1"),
+	issueMap := map[string]*task.Issue{
+		"epic-1": bi("epic-1", task.WithChildren("task-1")),
+		"task-1": bi("task-1", task.WithParentID("epic-1")),
 	}
 
 	root, err := BuildTree(issueMap, "task-1", DirectionUp, ModeDeps)
@@ -106,9 +81,9 @@ func TestBuildTree_Up_Basic(t *testing.T) {
 
 func TestBuildTree_Up_WithBlockedBy(t *testing.T) {
 	// Task blocked by another task
-	issueMap := map[string]*beads.Issue{
-		"task-1":    makeIssue("task-1", beads.StatusOpen, nil, nil, []string{"blocker-1"}, ""),
-		"blocker-1": makeIssue("blocker-1", beads.StatusClosed, nil, []string{"task-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"task-1":    bi("task-1", task.WithBlockedBy("blocker-1")),
+		"blocker-1": bi("blocker-1", task.WithStatus(task.StatusClosed), task.WithBlocks("task-1")),
 	}
 
 	root, err := BuildTree(issueMap, "task-1", DirectionUp, ModeDeps)
@@ -119,10 +94,10 @@ func TestBuildTree_Up_WithBlockedBy(t *testing.T) {
 
 func TestBuildTree_Up_Combined(t *testing.T) {
 	// Task with parent AND blockedBy
-	issueMap := map[string]*beads.Issue{
-		"epic-1":    makeIssue("epic-1", beads.StatusOpen, []string{"task-1"}, nil, nil, ""),
-		"task-1":    makeIssue("task-1", beads.StatusOpen, nil, nil, []string{"blocker-1"}, "epic-1"),
-		"blocker-1": makeIssue("blocker-1", beads.StatusClosed, nil, []string{"task-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"epic-1":    bi("epic-1", task.WithChildren("task-1")),
+		"task-1":    bi("task-1", task.WithBlockedBy("blocker-1"), task.WithParentID("epic-1")),
+		"blocker-1": bi("blocker-1", task.WithStatus(task.StatusClosed), task.WithBlocks("task-1")),
 	}
 
 	root, err := BuildTree(issueMap, "task-1", DirectionUp, ModeDeps)
@@ -134,8 +109,8 @@ func TestBuildTree_Up_Combined(t *testing.T) {
 }
 
 func TestBuildTree_MissingRoot(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"task-1": makeIssue("task-1", beads.StatusOpen, nil, nil, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"task-1": bi("task-1"),
 	}
 
 	_, err := BuildTree(issueMap, "nonexistent", DirectionDown, ModeDeps)
@@ -145,10 +120,10 @@ func TestBuildTree_MissingRoot(t *testing.T) {
 
 func TestBuildTree_CycleDetection(t *testing.T) {
 	// Create a cycle: A -> B -> C -> A
-	issueMap := map[string]*beads.Issue{
-		"a": makeIssue("a", beads.StatusOpen, []string{"b"}, nil, nil, ""),
-		"b": makeIssue("b", beads.StatusOpen, []string{"c"}, nil, nil, "a"),
-		"c": makeIssue("c", beads.StatusOpen, []string{"a"}, nil, nil, "b"), // Cycle back to A
+	issueMap := map[string]*task.Issue{
+		"a": bi("a", task.WithChildren("b")),
+		"b": bi("b", task.WithChildren("c"), task.WithParentID("a")),
+		"c": bi("c", task.WithChildren("a"), task.WithParentID("b")), // Cycle back to A
 	}
 
 	// Should not infinite loop - cycle detection should prevent
@@ -166,8 +141,8 @@ func TestBuildTree_CycleDetection(t *testing.T) {
 
 func TestBuildTree_MissingRelated(t *testing.T) {
 	// Issue references a child not in the map (shouldn't crash)
-	issueMap := map[string]*beads.Issue{
-		"epic-1": makeIssue("epic-1", beads.StatusOpen, []string{"missing-task"}, nil, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"epic-1": bi("epic-1", task.WithChildren("missing-task")),
 	}
 
 	root, err := BuildTree(issueMap, "epic-1", DirectionDown, ModeDeps)
@@ -177,12 +152,12 @@ func TestBuildTree_MissingRelated(t *testing.T) {
 
 func TestBuildTree_DeepTree(t *testing.T) {
 	// Create 5-level deep tree
-	issueMap := map[string]*beads.Issue{
-		"l0": makeIssue("l0", beads.StatusOpen, []string{"l1"}, nil, nil, ""),
-		"l1": makeIssue("l1", beads.StatusOpen, []string{"l2"}, nil, nil, "l0"),
-		"l2": makeIssue("l2", beads.StatusOpen, []string{"l3"}, nil, nil, "l1"),
-		"l3": makeIssue("l3", beads.StatusOpen, []string{"l4"}, nil, nil, "l2"),
-		"l4": makeIssue("l4", beads.StatusOpen, nil, nil, nil, "l3"),
+	issueMap := map[string]*task.Issue{
+		"l0": bi("l0", task.WithChildren("l1")),
+		"l1": bi("l1", task.WithChildren("l2"), task.WithParentID("l0")),
+		"l2": bi("l2", task.WithChildren("l3"), task.WithParentID("l1")),
+		"l3": bi("l3", task.WithChildren("l4"), task.WithParentID("l2")),
+		"l4": bi("l4", task.WithParentID("l3")),
 	}
 
 	root, err := BuildTree(issueMap, "l0", DirectionDown, ModeDeps)
@@ -200,11 +175,11 @@ func TestBuildTree_DeepTree(t *testing.T) {
 }
 
 func TestFlatten(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"root": makeIssue("root", beads.StatusOpen, []string{"a", "b"}, nil, nil, ""),
-		"a":    makeIssue("a", beads.StatusOpen, []string{"a1"}, nil, nil, "root"),
-		"b":    makeIssue("b", beads.StatusOpen, nil, nil, nil, "root"),
-		"a1":   makeIssue("a1", beads.StatusOpen, nil, nil, nil, "a"),
+	issueMap := map[string]*task.Issue{
+		"root": bi("root", task.WithChildren("a", "b")),
+		"a":    bi("a", task.WithChildren("a1"), task.WithParentID("root")),
+		"b":    bi("b", task.WithParentID("root")),
+		"a1":   bi("a1", task.WithParentID("a")),
 	}
 
 	root, _ := BuildTree(issueMap, "root", DirectionDown, ModeDeps)
@@ -218,10 +193,10 @@ func TestFlatten(t *testing.T) {
 }
 
 func TestCalculateProgress_AllOpen(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"root": makeIssue("root", beads.StatusOpen, []string{"a", "b"}, nil, nil, ""),
-		"a":    makeIssue("a", beads.StatusOpen, nil, nil, nil, "root"),
-		"b":    makeIssue("b", beads.StatusOpen, nil, nil, nil, "root"),
+	issueMap := map[string]*task.Issue{
+		"root": bi("root", task.WithChildren("a", "b")),
+		"a":    bi("a", task.WithParentID("root")),
+		"b":    bi("b", task.WithParentID("root")),
 	}
 
 	root, _ := BuildTree(issueMap, "root", DirectionDown, ModeDeps)
@@ -232,10 +207,10 @@ func TestCalculateProgress_AllOpen(t *testing.T) {
 }
 
 func TestCalculateProgress_AllClosed(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"root": makeIssue("root", beads.StatusClosed, []string{"a", "b"}, nil, nil, ""),
-		"a":    makeIssue("a", beads.StatusClosed, nil, nil, nil, "root"),
-		"b":    makeIssue("b", beads.StatusClosed, nil, nil, nil, "root"),
+	issueMap := map[string]*task.Issue{
+		"root": bi("root", task.WithStatus(task.StatusClosed), task.WithChildren("a", "b")),
+		"a":    bi("a", task.WithStatus(task.StatusClosed), task.WithParentID("root")),
+		"b":    bi("b", task.WithStatus(task.StatusClosed), task.WithParentID("root")),
 	}
 
 	root, _ := BuildTree(issueMap, "root", DirectionDown, ModeDeps)
@@ -246,11 +221,11 @@ func TestCalculateProgress_AllClosed(t *testing.T) {
 }
 
 func TestCalculateProgress_Mixed(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"root": makeIssue("root", beads.StatusOpen, []string{"a", "b", "c"}, nil, nil, ""),
-		"a":    makeIssue("a", beads.StatusClosed, nil, nil, nil, "root"),
-		"b":    makeIssue("b", beads.StatusOpen, nil, nil, nil, "root"),
-		"c":    makeIssue("c", beads.StatusClosed, nil, nil, nil, "root"),
+	issueMap := map[string]*task.Issue{
+		"root": bi("root", task.WithChildren("a", "b", "c")),
+		"a":    bi("a", task.WithStatus(task.StatusClosed), task.WithParentID("root")),
+		"b":    bi("b", task.WithParentID("root")),
+		"c":    bi("c", task.WithStatus(task.StatusClosed), task.WithParentID("root")),
 	}
 
 	root, _ := BuildTree(issueMap, "root", DirectionDown, ModeDeps)
@@ -261,10 +236,10 @@ func TestCalculateProgress_Mixed(t *testing.T) {
 }
 
 func TestCalculateProgress_Nested(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
-		"root": makeIssue("root", beads.StatusOpen, []string{"a"}, nil, nil, ""),
-		"a":    makeIssue("a", beads.StatusClosed, []string{"b"}, nil, nil, "root"),
-		"b":    makeIssue("b", beads.StatusClosed, nil, nil, nil, "a"),
+	issueMap := map[string]*task.Issue{
+		"root": bi("root", task.WithChildren("a")),
+		"a":    bi("a", task.WithStatus(task.StatusClosed), task.WithChildren("b"), task.WithParentID("root")),
+		"b":    bi("b", task.WithStatus(task.StatusClosed), task.WithParentID("a")),
 	}
 
 	root, _ := BuildTree(issueMap, "root", DirectionDown, ModeDeps)
@@ -284,10 +259,10 @@ func TestBuildTree_Down_SiblingBlocking(t *testing.T) {
 	// task-impl blocks task-tests (tests must wait for impl).
 	// In the tree, task-impl should appear first and task-tests
 	// should be nested under it (not a sibling).
-	issueMap := map[string]*beads.Issue{
-		"epic-1":     makeIssue("epic-1", beads.StatusOpen, []string{"task-tests", "task-impl"}, nil, nil, ""),
-		"task-impl":  makeIssue("task-impl", beads.StatusOpen, nil, []string{"task-tests"}, nil, "epic-1"),
-		"task-tests": makeIssue("task-tests", beads.StatusOpen, nil, nil, []string{"task-impl"}, "epic-1"),
+	issueMap := map[string]*task.Issue{
+		"epic-1":     bi("epic-1", task.WithChildren("task-tests", "task-impl")),
+		"task-impl":  bi("task-impl", task.WithBlocks("task-tests"), task.WithParentID("epic-1")),
+		"task-tests": bi("task-tests", task.WithBlockedBy("task-impl"), task.WithParentID("epic-1")),
 	}
 
 	root, err := BuildTree(issueMap, "epic-1", DirectionDown, ModeDeps)
@@ -312,11 +287,11 @@ func TestBuildTree_Down_SiblingBlocking(t *testing.T) {
 func TestBuildTree_Down_ChainedBlocking(t *testing.T) {
 	// Epic with three tasks in a blocking chain: A -> B -> C
 	// All are children of epic, but the tree should show the chain.
-	issueMap := map[string]*beads.Issue{
-		"epic":   makeIssue("epic", beads.StatusOpen, []string{"task-c", "task-b", "task-a"}, nil, nil, ""),
-		"task-a": makeIssue("task-a", beads.StatusOpen, nil, []string{"task-b"}, nil, "epic"),
-		"task-b": makeIssue("task-b", beads.StatusOpen, nil, []string{"task-c"}, []string{"task-a"}, "epic"),
-		"task-c": makeIssue("task-c", beads.StatusOpen, nil, nil, []string{"task-b"}, "epic"),
+	issueMap := map[string]*task.Issue{
+		"epic":   bi("epic", task.WithChildren("task-c", "task-b", "task-a")),
+		"task-a": bi("task-a", task.WithBlocks("task-b"), task.WithParentID("epic")),
+		"task-b": bi("task-b", task.WithBlocks("task-c"), task.WithBlockedBy("task-a"), task.WithParentID("epic")),
+		"task-c": bi("task-c", task.WithBlockedBy("task-b"), task.WithParentID("epic")),
 	}
 
 	root, err := BuildTree(issueMap, "epic", DirectionDown, ModeDeps)
@@ -339,9 +314,9 @@ func TestBuildTree_Down_WithDiscovered(t *testing.T) {
 	// Issue with discovered-from relationships
 	// bug-1 was discovered while working on feature-1 (discovered-from relationship)
 	// Down traversal from feature-1 shows bug-1 via Discovered field
-	issueMap := map[string]*beads.Issue{
-		"feature-1": makeIssueWithDiscovered("feature-1", beads.StatusOpen, nil, nil, nil, nil, []string{"bug-1"}, ""),
-		"bug-1":     makeIssueWithDiscovered("bug-1", beads.StatusOpen, nil, nil, nil, []string{"feature-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"feature-1": bi("feature-1", task.WithDiscovered("bug-1")),
+		"bug-1":     bi("bug-1", task.WithDiscoveredFrom("feature-1")),
 	}
 
 	root, err := BuildTree(issueMap, "feature-1", DirectionDown, ModeDeps)
@@ -354,9 +329,9 @@ func TestBuildTree_Up_WithDiscoveredFrom(t *testing.T) {
 	// Issue with discovered-from relationships (up direction)
 	// bug-1 was discovered from feature-1, so traversing up from bug-1 shows feature-1
 	// Up traversal from bug-1 shows feature-1 via DiscoveredFrom field
-	issueMap := map[string]*beads.Issue{
-		"feature-1": makeIssueWithDiscovered("feature-1", beads.StatusOpen, nil, nil, nil, nil, []string{"bug-1"}, ""),
-		"bug-1":     makeIssueWithDiscovered("bug-1", beads.StatusOpen, nil, nil, nil, []string{"feature-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"feature-1": bi("feature-1", task.WithDiscovered("bug-1")),
+		"bug-1":     bi("bug-1", task.WithDiscoveredFrom("feature-1")),
 	}
 
 	root, err := BuildTree(issueMap, "bug-1", DirectionUp, ModeDeps)
@@ -367,9 +342,9 @@ func TestBuildTree_Up_WithDiscoveredFrom(t *testing.T) {
 
 func TestBuildTree_Down_DiscoveredNotInChildrenMode(t *testing.T) {
 	// Discovered issues should NOT appear in ModeChildren (only parent-child hierarchy)
-	issueMap := map[string]*beads.Issue{
-		"feature-1": makeIssueWithDiscovered("feature-1", beads.StatusOpen, nil, nil, nil, nil, []string{"bug-1"}, ""),
-		"bug-1":     makeIssueWithDiscovered("bug-1", beads.StatusOpen, nil, nil, nil, []string{"feature-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"feature-1": bi("feature-1", task.WithDiscovered("bug-1")),
+		"bug-1":     bi("bug-1", task.WithDiscoveredFrom("feature-1")),
 	}
 
 	root, err := BuildTree(issueMap, "feature-1", DirectionDown, ModeChildren)
@@ -380,10 +355,10 @@ func TestBuildTree_Down_DiscoveredNotInChildrenMode(t *testing.T) {
 
 func TestBuildTree_Down_CombinedDiscoveredAndBlocks(t *testing.T) {
 	// Issue with both blocks and discovered-from relationships
-	issueMap := map[string]*beads.Issue{
-		"feature-1": makeIssueWithDiscovered("feature-1", beads.StatusOpen, nil, []string{"feature-2"}, nil, nil, []string{"bug-1"}, ""),
-		"feature-2": makeIssue("feature-2", beads.StatusOpen, nil, nil, []string{"feature-1"}, ""),
-		"bug-1":     makeIssueWithDiscovered("bug-1", beads.StatusOpen, nil, nil, nil, []string{"feature-1"}, nil, ""),
+	issueMap := map[string]*task.Issue{
+		"feature-1": bi("feature-1", task.WithBlocks("feature-2"), task.WithDiscovered("bug-1")),
+		"feature-2": bi("feature-2", task.WithBlockedBy("feature-1")),
+		"bug-1":     bi("bug-1", task.WithDiscoveredFrom("feature-1")),
 	}
 
 	root, err := BuildTree(issueMap, "feature-1", DirectionDown, ModeDeps)

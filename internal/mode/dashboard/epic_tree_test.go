@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/tree"
@@ -21,14 +21,14 @@ import (
 // === Test Helpers ===
 
 // createTestIssue creates a test issue with the given parameters.
-func createTestIssue(id, title string, parentID string) beads.Issue {
-	return beads.Issue{
+func createTestIssue(id, title string, parentID string) task.Issue {
+	return task.Issue{
 		ID:        id,
 		TitleText: title,
 		ParentID:  parentID,
-		Status:    beads.StatusOpen,
-		Priority:  beads.PriorityMedium,
-		Type:      beads.TypeTask,
+		Status:    task.StatusOpen,
+		Priority:  task.PriorityMedium,
+		Type:      task.TypeTask,
 	}
 }
 
@@ -44,20 +44,20 @@ func createEpicTreeTestModel(t *testing.T) Model {
 	close(eventCh)
 	mockCP.On("Subscribe", mock.Anything).Return((<-chan controlplane.ControlPlaneEvent)(eventCh), func() {}).Maybe()
 
-	// Create mock client that handles GetComments
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	// Create mock task executor that handles GetComments
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
 	// Create mock executor
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
 	cfg := config.Defaults()
 
 	services := mode.Services{
-		Client:   mockClient,
-		Executor: mockExecutor,
-		Config:   &cfg,
+		TaskExecutor:  mockTaskExec,
+		QueryExecutor: mockExecutor,
+		Config:        &cfg,
 	}
 
 	dashCfg := Config{
@@ -75,12 +75,12 @@ func createEpicTreeTestModel(t *testing.T) Model {
 
 func TestLoadEpicTreeReturnsCommand(t *testing.T) {
 	// Setup mock executor
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	mockExecutor.EXPECT().
 		Execute(mock.MatchedBy(func(query string) bool {
 			return query == `id = "epic-123" expand down depth *`
 		})).
-		Return([]beads.Issue{createTestIssue("epic-123", "Test Epic", "")}, nil).
+		Return([]task.Issue{createTestIssue("epic-123", "Test Epic", "")}, nil).
 		Maybe()
 
 	// Call loadEpicTree
@@ -91,7 +91,7 @@ func TestLoadEpicTreeReturnsCommand(t *testing.T) {
 }
 
 func TestLoadEpicTreeReturnsNilForEmptyEpicID(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	// Empty epic ID should return nil
 	cmd := loadEpicTree("", mockExecutor)
@@ -106,8 +106,8 @@ func TestLoadEpicTreeReturnsNilForNilExecutor(t *testing.T) {
 
 func TestLoadEpicTreeExecutesBQL(t *testing.T) {
 	// Setup mock executor
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	expectedIssues := []beads.Issue{
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	expectedIssues := []task.Issue{
 		createTestIssue("epic-123", "Test Epic", ""),
 		createTestIssue("task-1", "Task 1", "epic-123"),
 	}
@@ -135,7 +135,7 @@ func TestLoadEpicTreeExecutesBQL(t *testing.T) {
 
 func TestLoadEpicTreeReturnsErrorInMsg(t *testing.T) {
 	// Setup mock executor that returns an error
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	expectedErr := errors.New("database error")
 	mockExecutor.EXPECT().
 		Execute(`id = "epic-123" expand down depth *`).
@@ -167,7 +167,7 @@ func TestHandleEpicTreeLoadedBuildsTree(t *testing.T) {
 	m.lastLoadedEpicID = "epic-123"
 
 	// Create issues
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		createTestIssue("epic-123", "Test Epic", ""),
 		createTestIssue("task-1", "Task 1", "epic-123"),
 		createTestIssue("task-2", "Task 2", "epic-123"),
@@ -193,7 +193,7 @@ func TestHandleEpicTreeLoadedRejectsStale(t *testing.T) {
 	m.lastLoadedEpicID = "epic-456" // Different from message
 
 	// Create issues for a different epic
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		createTestIssue("epic-123", "Old Epic", ""),
 	}
 
@@ -216,7 +216,7 @@ func TestHandleEpicTreeLoadedHandlesError(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 	m.lastLoadedEpicID = "epic-123"
 	// Pre-set an existing tree to verify it gets cleared
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"old-epic": {ID: "old-epic", TitleText: "Old"},
 	}
 	m.epicTree = tree.New("old-epic", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
@@ -243,7 +243,7 @@ func TestHandleEpicTreeLoadedHandlesEmptyResults(t *testing.T) {
 
 	// Handle empty results
 	msg := epicTreeLoadedMsg{
-		Issues: []beads.Issue{}, // Empty
+		Issues: []task.Issue{}, // Empty
 		RootID: "epic-123",
 		Err:    nil,
 	}
@@ -262,7 +262,7 @@ func TestHandleEpicTreeLoadedPreservesDirectionAndMode(t *testing.T) {
 	m.lastLoadedEpicID = "epic-123"
 
 	// Create existing tree with DirectionUp and ModeChildren
-	existingIssueMap := map[string]*beads.Issue{
+	existingIssueMap := map[string]*task.Issue{
 		"old-epic": {ID: "old-epic", TitleText: "Old"},
 	}
 	m.epicTree = tree.New("old-epic", existingIssueMap, tree.DirectionUp, tree.ModeChildren, nil)
@@ -272,7 +272,7 @@ func TestHandleEpicTreeLoadedPreservesDirectionAndMode(t *testing.T) {
 	require.Equal(t, tree.ModeChildren, m.epicTree.Mode())
 
 	// Create new issues
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		createTestIssue("epic-123", "New Epic", ""),
 	}
 
@@ -298,9 +298,9 @@ func TestUpdateEpicDetailSyncsWithTree(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 
 	// Create issue map and tree
-	issueMap := map[string]*beads.Issue{
-		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: beads.StatusOpen},
-		"task-1":   {ID: "task-1", TitleText: "Task 1", ParentID: "epic-123", Status: beads.StatusOpen},
+	issueMap := map[string]*task.Issue{
+		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: task.StatusOpen},
+		"task-1":   {ID: "task-1", TitleText: "Task 1", ParentID: "epic-123", Status: task.StatusOpen},
 	}
 	m.epicTree = tree.New("epic-123", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
 
@@ -332,7 +332,7 @@ func TestUpdateEpicDetailHandlesNilNode(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 
 	// Create tree with empty issue map (results in no selected node)
-	emptyIssueMap := map[string]*beads.Issue{}
+	emptyIssueMap := map[string]*task.Issue{}
 	m.epicTree = tree.New("nonexistent", emptyIssueMap, tree.DirectionDown, tree.ModeDeps, nil)
 
 	// Verify tree has no selected node
@@ -367,20 +367,20 @@ func createEpicTreeTestModelWithWorkflows(t *testing.T) Model {
 	close(eventCh)
 	mockCP.On("Subscribe", mock.Anything).Return((<-chan controlplane.ControlPlaneEvent)(eventCh), func() {}).Maybe()
 
-	// Create mock client that handles GetComments
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	// Create mock task executor that handles GetComments
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
 	// Create mock executor
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
 	cfg := config.Defaults()
 
 	services := mode.Services{
-		Client:   mockClient,
-		Executor: mockExecutor,
-		Config:   &cfg,
+		TaskExecutor:  mockTaskExec,
+		QueryExecutor: mockExecutor,
+		Config:        &cfg,
 	}
 
 	dashCfg := Config{
@@ -460,11 +460,11 @@ func createEpicTreeTestModelWithTree(t *testing.T) Model {
 
 	// Create a tree with multiple nodes for navigation
 	// NOTE: The tree traverses Children arrays (DirectionDown), so we must populate Children on the parent
-	issueMap := map[string]*beads.Issue{
-		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: beads.StatusOpen, Type: beads.TypeEpic, Children: []string{"task-1", "task-2", "task-3"}},
-		"task-1":   {ID: "task-1", TitleText: "Task 1", ParentID: "epic-123", Status: beads.StatusOpen, Type: beads.TypeTask},
-		"task-2":   {ID: "task-2", TitleText: "Task 2", ParentID: "epic-123", Status: beads.StatusOpen, Type: beads.TypeTask},
-		"task-3":   {ID: "task-3", TitleText: "Task 3", ParentID: "epic-123", Status: beads.StatusOpen, Type: beads.TypeTask},
+	issueMap := map[string]*task.Issue{
+		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: task.StatusOpen, Type: task.TypeEpic, Children: []string{"task-1", "task-2", "task-3"}},
+		"task-1":   {ID: "task-1", TitleText: "Task 1", ParentID: "epic-123", Status: task.StatusOpen, Type: task.TypeTask},
+		"task-2":   {ID: "task-2", TitleText: "Task 2", ParentID: "epic-123", Status: task.StatusOpen, Type: task.TypeTask},
+		"task-3":   {ID: "task-3", TitleText: "Task 3", ParentID: "epic-123", Status: task.StatusOpen, Type: task.TypeTask},
 	}
 	m.epicTree = tree.New("epic-123", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
 	m.epicTree.SetSize(80, 20)
@@ -658,12 +658,12 @@ func TestYankIssueDescription_CopiesDescriptionToClipboard(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 
 	// Setup tree with issue that has a description
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"epic-123": {
 			ID:              "epic-123",
 			TitleText:       "Test Epic",
 			DescriptionText: "This is the full description of the epic.",
-			Status:          beads.StatusOpen,
+			Status:          task.StatusOpen,
 		},
 	}
 	m.epicTree = tree.New("epic-123", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
@@ -691,12 +691,12 @@ func TestYankIssueDescription_EmptyDescription(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 
 	// Setup tree with issue that has no description
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"epic-123": {
 			ID:              "epic-123",
 			TitleText:       "Test Epic",
 			DescriptionText: "", // Empty description
-			Status:          beads.StatusOpen,
+			Status:          task.StatusOpen,
 		},
 	}
 	m.epicTree = tree.New("epic-123", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
@@ -746,17 +746,17 @@ func createIssueEditorTestModel(t *testing.T) Model {
 	m := createEpicTreeTestModel(t)
 
 	// Create a tree with an issue to edit
-	issueMap := map[string]*beads.Issue{
-		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: beads.StatusOpen, Priority: beads.PriorityMedium},
+	issueMap := map[string]*task.Issue{
+		"epic-123": {ID: "epic-123", TitleText: "Test Epic", Status: task.StatusOpen, Priority: task.PriorityMedium},
 	}
 	m.epicTree = tree.New("epic-123", issueMap, tree.DirectionDown, tree.ModeDeps, nil)
 	m.lastLoadedEpicID = "epic-123"
 
 	// Open the issue editor
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:       "issue-456",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{"test"},
 	}
 	editor := issueeditor.New(issue).SetSize(100, 40)
@@ -773,8 +773,8 @@ func TestEditIssue_SaveMsgClosesModal(t *testing.T) {
 	// Send SaveMsg
 	result, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:  "issue-456",
-		Priority: beads.PriorityHigh,
-		Status:   beads.StatusInProgress,
+		Priority: task.PriorityHigh,
+		Status:   task.StatusInProgress,
 		Labels:   []string{"updated"},
 	})
 	m = result.(Model)
@@ -861,7 +861,7 @@ func TestDashboard_HandleIssueSaved_Success(t *testing.T) {
 
 	msg := issueSavedMsg{
 		issueID: "issue-456",
-		opts:    beads.UpdateIssueOptions{},
+		opts:    task.UpdateOptions{},
 		err:     nil,
 	}
 	m, cmd := m.handleIssueSaved(msg)
@@ -876,7 +876,7 @@ func TestDashboard_HandleIssueSaved_Error(t *testing.T) {
 
 	msg := issueSavedMsg{
 		issueID: "issue-456",
-		opts:    beads.UpdateIssueOptions{},
+		opts:    task.UpdateOptions{},
 		err:     errors.New("database error"),
 	}
 	m, cmd := m.handleIssueSaved(msg)
@@ -894,12 +894,12 @@ func TestDashboard_SaveIssueCmd_CallsUpdateIssue(t *testing.T) {
 	// Verify saveIssueCmd calls BeadsExecutor.UpdateIssue with correct args
 	m := createIssueEditorTestModel(t)
 
-	status := beads.StatusInProgress
-	opts := beads.UpdateIssueOptions{Status: &status}
+	status := task.StatusInProgress
+	opts := task.UpdateOptions{Status: &status}
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().UpdateIssue("issue-456", opts).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	cmd := m.saveIssueCmd("issue-456", opts)
 	require.NotNil(t, cmd)
@@ -910,18 +910,18 @@ func TestDashboard_SaveIssueCmd_CallsUpdateIssue(t *testing.T) {
 	require.Equal(t, "issue-456", savedMsg.issueID)
 	require.NoError(t, savedMsg.err)
 	require.NotNil(t, savedMsg.opts.Status)
-	require.Equal(t, beads.StatusInProgress, *savedMsg.opts.Status)
+	require.Equal(t, task.StatusInProgress, *savedMsg.opts.Status)
 }
 
 func TestDashboard_SaveIssueCmd_PropagatesErrors(t *testing.T) {
 	// Verify saveIssueCmd propagates errors from UpdateIssue
 	m := createIssueEditorTestModel(t)
 
-	opts := beads.UpdateIssueOptions{}
+	opts := task.UpdateOptions{}
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().UpdateIssue("issue-456", opts).Return(errors.New("update failed"))
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	cmd := m.saveIssueCmd("issue-456", opts)
 	require.NotNil(t, cmd)
@@ -938,10 +938,10 @@ func TestDashboard_SaveMsg_DispatchesSaveIssueCmd(t *testing.T) {
 	m := createIssueEditorTestModel(t)
 
 	// Set the original issue for change detection
-	originalIssue := beads.Issue{
+	originalIssue := task.Issue{
 		ID:       "issue-456",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{"test"},
 		Notes:    "original notes",
 	}
@@ -950,8 +950,8 @@ func TestDashboard_SaveMsg_DispatchesSaveIssueCmd(t *testing.T) {
 	// Send SaveMsg with changed fields
 	result, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:  "issue-456",
-		Priority: beads.PriorityHigh,
-		Status:   beads.StatusInProgress,
+		Priority: task.PriorityHigh,
+		Status:   task.StatusInProgress,
 		Labels:   []string{"updated"},
 		Notes:    "new notes",
 	})
@@ -967,28 +967,28 @@ func TestDashboard_SaveMsg_UnchangedFields(t *testing.T) {
 	// Verify SaveMsg with unchanged fields results in all-nil opts
 	m := createIssueEditorTestModel(t)
 
-	originalIssue := beads.Issue{
+	originalIssue := task.Issue{
 		ID:       "issue-456",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{"test"},
 		Notes:    "original notes",
 	}
 	m.editingIssue = &originalIssue
 
 	// Set up mock expecting UpdateIssue with all-nil opts (no changes)
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("issue-456", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("issue-456", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Title == nil && opts.Description == nil && opts.Notes == nil &&
 			opts.Priority == nil && opts.Status == nil && opts.Labels == nil
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Send SaveMsg with same values as original
 	result, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:  "issue-456",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{"test"},
 		Notes:    "original notes",
 	})
@@ -1059,7 +1059,7 @@ func TestEditIssue_NoOpWithNoSelection(t *testing.T) {
 	m := createEpicTreeTestModel(t)
 
 	// Create tree with empty issue map (results in no selected node)
-	emptyIssueMap := map[string]*beads.Issue{}
+	emptyIssueMap := map[string]*task.Issue{}
 	m.epicTree = tree.New("nonexistent", emptyIssueMap, tree.DirectionDown, tree.ModeDeps, nil)
 	require.Nil(t, m.epicTree.SelectedNode(), "tree should have no selected node")
 
@@ -1084,10 +1084,10 @@ func TestEditIssue_WorkflowSwitchClosesModal(t *testing.T) {
 	m.selectedIndex = 0
 
 	// Open the issue editor
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:       "issue-456",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{"test"},
 	}
 	editor := issueeditor.New(issue).SetSize(100, 40)

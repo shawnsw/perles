@@ -12,11 +12,6 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/zjrosen/perles/frontend"
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
-	"github.com/zjrosen/perles/internal/bql"
-	"github.com/zjrosen/perles/internal/cachemanager"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/flags"
 	appgit "github.com/zjrosen/perles/internal/git/application"
@@ -38,6 +33,7 @@ import (
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	domain "github.com/zjrosen/perles/internal/sessions/domain"
 	"github.com/zjrosen/perles/internal/sound"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 
 	"github.com/zjrosen/perles/internal/ui/shared/chatpanel"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
@@ -83,9 +79,8 @@ type Model struct {
 	chatPanelFocused bool
 	chatInfra        *v2.SimpleInfrastructure
 
-	// Cache Managers
-	bqlCache      cachemanager.CacheManager[string, []beads.Issue]
-	depGraphCache cachemanager.CacheManager[string, *bql.DependencyGraph]
+	// Backend for cache flushing on DB changes
+	backend taskpkg.Backend
 
 	// File watcher for auto-refresh (pubsub-based)
 	watcherHandle   *watcher.Watcher
@@ -111,24 +106,34 @@ type Model struct {
 	db *sqlite.DB
 }
 
+// AppConfig holds all pre-constructed dependencies for the application.
+// The caller (cmd/root.go) is responsible for creating the Backend via the
+// factory function and passing it here. The app extracts all task-layer
+// services from Backend.Services() and flushes caches via Backend.FlushCaches().
+type AppConfig struct {
+	Cfg             config.Config
+	Backend         taskpkg.Backend // Fully-wired backend (beads, etc.)
+	ConfigPath      string          // Path to config file (for saving columns)
+	WorkDir         string
+	DebugMode       bool
+	RegistryService *appreg.RegistryService
+}
+
 // NewWithConfig creates a new application model with the provided configuration.
-// dbPath is the path to the beads database file for watching changes.
-// configPath is the path to the config file for saving column changes.
-// debugMode enables the log overlay (Ctrl+X toggle).
-// registryService provides template listing, validation, and epic_driven.md access (can be nil).
+// The Backend in AppConfig is fully wired by the caller; this method extracts
+// task-layer services from it and owns the watcher/cache lifecycle.
 //
 // Returns an error if database initialization fails (fail-fast behavior).
-func NewWithConfig(
-	client appbeads.DBClient,
-	cfg config.Config,
-	bqlCache cachemanager.CacheManager[string, []beads.Issue],
-	depGraphCache cachemanager.CacheManager[string, *bql.DependencyGraph],
-	dbPath,
-	configPath,
-	workDir string,
-	debugMode bool,
-	registryService *appreg.RegistryService,
-) (Model, error) {
+func NewWithConfig(appCfg AppConfig) (Model, error) {
+	cfg := appCfg.Cfg
+	backend := appCfg.Backend
+	backendSvc := backend.Services()
+	dbPath := backendSvc.DBPath
+	configPath := appCfg.ConfigPath
+	workDir := appCfg.WorkDir
+	debugMode := appCfg.DebugMode
+	registryService := appCfg.RegistryService
+	watcherCfg := backendSvc.WatcherConfig
 	// Initialize SQLite database for session persistence (only if feature flag enabled)
 	// Path is ~/.perles/perles.db (or perles-test.db when running tests)
 	var db *sqlite.DB
@@ -154,7 +159,15 @@ func NewWithConfig(
 	)
 
 	if cfg.AutoRefresh && dbPath != "" {
-		w, err := watcher.New(watcher.DefaultConfig(dbPath, client.Dialect()))
+		debounceDur := watcherCfg.DebounceDuration
+		if debounceDur == 0 {
+			debounceDur = 100 * time.Millisecond
+		}
+		w, err := watcher.New(watcher.Config{
+			DBPath:        dbPath,
+			DebounceDur:   debounceDur,
+			RelevantFiles: watcherCfg.RelevantFiles,
+		})
 		if err == nil {
 			if err := w.Start(); err == nil {
 				watcherHandle = w
@@ -178,32 +191,26 @@ func NewWithConfig(
 
 	flagService := flags.New(cfg.Flags)
 
-	beadsExec := infrabeads.NewBDExecutor(workDir, cfg.ResolvedBeadsDir)
-
 	// Create shared services with session repository from SQLite database
 	var sessionRepo domain.SessionRepository
 	if db != nil {
 		sessionRepo = db.SessionRepository()
 	}
 
-	// Create BQL executor only if client is available (nil when beads DB not present)
-	var bqlExec bql.BQLExecutor
-	if client != nil {
-		bqlExec = bql.NewExecutor(client.DB(), client.Dialect(), bqlCache, depGraphCache)
-	}
-
 	services := mode.Services{
-		Client:        client,
-		Config:        &cfg,
-		ConfigPath:    configPath,
-		DBPath:        dbPath,
-		WorkDir:       workDir,
-		Executor:      bqlExec,
-		BeadsExecutor: beadsExec,
-		Clipboard:     shared.SystemClipboard{},
-		Clock:         shared.RealClock{},
-		Flags:         flagService,
-		Sounds:        sound.NewSystemSoundService(cfg.Sound.Events),
+		TaskExecutor:      backendSvc.TaskExecutor,
+		QueryExecutor:     backendSvc.QueryExecutor,
+		QueryHelpers:      backendSvc.QueryHelpers,
+		SyntaxHighlighter: backendSvc.SyntaxHighlighter,
+		Capabilities:      backendSvc.Capabilities,
+		Config:            &cfg,
+		ConfigPath:        configPath,
+		DBPath:            dbPath,
+		WorkDir:           workDir,
+		Clipboard:         shared.SystemClipboard{},
+		Clock:             shared.RealClock{},
+		Flags:             flagService,
+		Sounds:            sound.NewSystemSoundService(cfg.Sound.Events),
 		GitExecutorFactory: func(path string) appgit.GitExecutor {
 			return infragit.NewRealExecutor(path)
 		},
@@ -236,7 +243,7 @@ func NewWithConfig(
 	}
 
 	// Create WorkflowCreator using the passed-in registryService
-	workflowCreator := appreg.NewWorkflowCreator(registryService, beadsExec, cfg.Orchestration.Templates)
+	workflowCreator := appreg.NewWorkflowCreator(registryService, backendSvc.TaskExecutor, cfg.Orchestration.Templates)
 
 	// Create chat panel with config from services
 	// Panel defaults to hidden (visible = false)
@@ -255,8 +262,7 @@ func NewWithConfig(
 		kanban:           kanban.New(services),
 		search:           search.New(services),
 		services:         services,
-		bqlCache:         bqlCache,
-		depGraphCache:    depGraphCache,
+		backend:          backend,
 		logOverlay:       overlay,
 		debugMode:        debugMode,
 		logListenCmd:     logListenCmd,
@@ -840,14 +846,13 @@ func (m Model) switchMode() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// flushQueryCaches flushes the BQL and dependency-graph caches so that
-// subsequent queries hit the database instead of returning stale results.
+// flushQueryCaches flushes all backend caches so that subsequent queries
+// hit the data store instead of returning stale results.
 func (m Model) flushQueryCaches(reason string) {
-	if err := m.bqlCache.Flush(context.Background()); err != nil {
-		log.Warn(log.CatCache, "Failed to flush BQL cache", "reason", reason, "error", err)
-	}
-	if err := m.depGraphCache.Flush(context.Background()); err != nil {
-		log.Warn(log.CatCache, "Failed to flush dep graph cache", "reason", reason, "error", err)
+	if m.backend != nil {
+		if err := m.backend.FlushCaches(context.Background()); err != nil {
+			log.Warn(log.CatCache, "Failed to flush backend caches", "reason", reason, "error", err)
+		}
 	}
 }
 
@@ -1294,6 +1299,7 @@ func (m *Model) createControlPlane() controlplane.ControlPlane {
 		SessionFactory:     sessionFactory,
 		SoundService:       m.services.Sounds,
 		BeadsDir:           m.services.Config.ResolvedBeadsDir,
+		TaskExecutor:       m.services.TaskExecutor,
 	})
 	if err != nil {
 		log.Error(log.CatMode, "Failed to create Supervisor", "error", err)

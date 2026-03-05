@@ -11,9 +11,9 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // TestMain initializes the global zone manager for all tests in this package.
@@ -794,7 +794,7 @@ func TestSwapColumns_UpdatesColumnIndices(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "Col2", // Title is "Col2" because it moved from position 2
-		Issues: []beads.Issue{
+		Issues: []task.Issue{
 			{ID: "bd-1", TitleText: "Test Issue"},
 		},
 	}
@@ -834,9 +834,9 @@ func TestBoard_View_WithTreeColumn_Golden(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0, // Backlog is at index 0
 		ColumnTitle: "Backlog",
-		Issues: []beads.Issue{
-			{ID: "bd-1", TitleText: "Open Task", Priority: beads.PriorityMedium, Type: beads.TypeTask, Status: beads.StatusOpen},
-			{ID: "bd-2", TitleText: "Open Bug", Priority: beads.PriorityHigh, Type: beads.TypeBug, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: "bd-1", TitleText: "Open Task", Priority: task.PriorityMedium, Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: "bd-2", TitleText: "Open Bug", Priority: task.PriorityHigh, Type: task.TypeBug, Status: task.StatusOpen},
 		},
 	}
 	m, _ = m.Update(backlogMsg)
@@ -845,8 +845,8 @@ func TestBoard_View_WithTreeColumn_Golden(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 2, // Done is at index 2
 		ColumnTitle: "Done",
-		Issues: []beads.Issue{
-			{ID: "bd-3", TitleText: "Completed Feature", Priority: beads.PriorityLow, Type: beads.TypeFeature, Status: beads.StatusClosed},
+		Issues: []task.Issue{
+			{ID: "bd-3", TitleText: "Completed Feature", Priority: task.PriorityLow, Type: task.TypeFeature, Status: task.StatusClosed},
 		},
 	}
 	m, _ = m.Update(doneMsg)
@@ -858,11 +858,11 @@ func TestBoard_View_WithTreeColumn_Golden(t *testing.T) {
 		ColumnIndex: 1, // Dependencies is at index 1
 		ColumnTitle: "Dependencies",
 		RootID:      "root-1",
-		IssueMap: map[string]*beads.Issue{
-			"root-1":  {ID: "root-1", TitleText: "Epic: Feature X", Type: beads.TypeEpic, Priority: beads.PriorityHigh, Children: []string{"child-1", "child-2"}, CreatedAt: fixedTime},
-			"child-1": {ID: "child-1", TitleText: "Task: Backend API", Type: beads.TypeTask, Priority: beads.PriorityMedium, ParentID: "root-1", CreatedAt: fixedTime},
-			"child-2": {ID: "child-2", TitleText: "Task: Frontend UI", Type: beads.TypeTask, Priority: beads.PriorityMedium, ParentID: "root-1", Children: []string{"child-3"}, CreatedAt: fixedTime},
-			"child-3": {ID: "child-3", TitleText: "Subtask: Button", Type: beads.TypeTask, Priority: beads.PriorityLow, ParentID: "child-2", CreatedAt: fixedTime},
+		IssueMap: map[string]*task.Issue{
+			"root-1":  {ID: "root-1", TitleText: "Epic: Feature X", Type: task.TypeEpic, Priority: task.PriorityHigh, Children: []string{"child-1", "child-2"}, CreatedAt: fixedTime},
+			"child-1": {ID: "child-1", TitleText: "Task: Backend API", Type: task.TypeTask, Priority: task.PriorityMedium, ParentID: "root-1", CreatedAt: fixedTime},
+			"child-2": {ID: "child-2", TitleText: "Task: Frontend UI", Type: task.TypeTask, Priority: task.PriorityMedium, ParentID: "root-1", Children: []string{"child-3"}, CreatedAt: fixedTime},
+			"child-3": {ID: "child-3", TitleText: "Subtask: Button", Type: task.TypeTask, Priority: task.PriorityLow, ParentID: "child-2", CreatedAt: fixedTime},
 		},
 	}
 	m, _ = m.Update(treeMsg)
@@ -1006,9 +1006,9 @@ func TestBoard_MouseClick_SelectsIssueAndEmitsMessage(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "Todo",
-		Issues: []beads.Issue{
-			{ID: issueID1, TitleText: "First Issue", Priority: beads.PriorityHigh, Type: beads.TypeTask, Status: beads.StatusOpen},
-			{ID: issueID2, TitleText: "Second Issue", Priority: beads.PriorityMedium, Type: beads.TypeBug, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: issueID1, TitleText: "First Issue", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: issueID2, TitleText: "Second Issue", Priority: task.PriorityMedium, Type: task.TypeBug, Status: task.StatusOpen},
 		},
 	}
 	m, _ = m.Update(msg)
@@ -1095,8 +1095,8 @@ func TestBoard_MouseClick_ChangesColumnFocus(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "Col0",
-		Issues: []beads.Issue{
-			{ID: issueID, TitleText: "Issue in Col0", Priority: beads.PriorityHigh, Type: beads.TypeTask, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: issueID, TitleText: "Issue in Col0", Priority: task.PriorityHigh, Type: task.TypeTask, Status: task.StatusOpen},
 		},
 	}
 	m, _ = m.Update(msg)
@@ -1156,14 +1156,14 @@ func TestBoard_MouseClick_ScrolledColumnZonesRefresh(t *testing.T) {
 	m = m.SetSize(80, 20) // Small height to force scrolling
 
 	// Populate with many issues (more than can fit in viewport)
-	issues := make([]beads.Issue, 30)
+	issues := make([]task.Issue, 30)
 	for i := 0; i < 30; i++ {
-		issues[i] = beads.Issue{
+		issues[i] = task.Issue{
 			ID:        fmt.Sprintf("scroll-test-issue-%d", i),
 			TitleText: fmt.Sprintf("Issue %d", i),
-			Priority:  beads.PriorityMedium,
-			Type:      beads.TypeTask,
-			Status:    beads.StatusOpen,
+			Priority:  task.PriorityMedium,
+			Type:      task.TypeTask,
+			Status:    task.StatusOpen,
 		}
 	}
 
@@ -1237,8 +1237,8 @@ func TestBoard_MouseClick_DuplicateIssueAcrossColumns(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "High Priority",
-		Issues: []beads.Issue{
-			{ID: duplicateIssueID, TitleText: "Critical Bug", Priority: beads.PriorityCritical, Type: beads.TypeBug, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: duplicateIssueID, TitleText: "Critical Bug", Priority: task.PriorityCritical, Type: task.TypeBug, Status: task.StatusOpen},
 		},
 	})
 
@@ -1247,8 +1247,8 @@ func TestBoard_MouseClick_DuplicateIssueAcrossColumns(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 1,
 		ColumnTitle: "Open Issues",
-		Issues: []beads.Issue{
-			{ID: duplicateIssueID, TitleText: "Critical Bug", Priority: beads.PriorityCritical, Type: beads.TypeBug, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: duplicateIssueID, TitleText: "Critical Bug", Priority: task.PriorityCritical, Type: task.TypeBug, Status: task.StatusOpen},
 		},
 	})
 
@@ -1328,9 +1328,9 @@ func TestBoard_MouseClick_RapidSuccessiveClicks(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
-			{ID: "rapid-click-1", TitleText: "Issue 1", Type: beads.TypeTask, Status: beads.StatusOpen},
-			{ID: "rapid-click-2", TitleText: "Issue 2", Type: beads.TypeTask, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: "rapid-click-1", TitleText: "Issue 1", Type: task.TypeTask, Status: task.StatusOpen},
+			{ID: "rapid-click-2", TitleText: "Issue 2", Type: task.TypeTask, Status: task.StatusOpen},
 		},
 	})
 
@@ -1409,14 +1409,14 @@ func TestBoard_MouseClick_PerformanceWithManyIssues(t *testing.T) {
 
 	// Populate each column with 20+ issues (60+ total)
 	for colIdx := 0; colIdx < 3; colIdx++ {
-		issues := make([]beads.Issue, 20)
+		issues := make([]task.Issue, 20)
 		for i := 0; i < 20; i++ {
-			issues[i] = beads.Issue{
+			issues[i] = task.Issue{
 				ID:        fmt.Sprintf("perf-col%d-issue-%d", colIdx, i),
 				TitleText: fmt.Sprintf("Performance Test Issue %d", i),
-				Priority:  beads.PriorityMedium,
-				Type:      beads.TypeTask,
-				Status:    beads.StatusOpen,
+				Priority:  task.PriorityMedium,
+				Type:      task.TypeTask,
+				Status:    task.StatusOpen,
 			}
 		}
 		m, _ = m.Update(ColumnLoadedMsg{

@@ -6,9 +6,8 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/issuebadge"
 	"github.com/zjrosen/perles/internal/ui/styles"
 
@@ -50,7 +49,7 @@ type BoardColumn interface {
 	HandleLoaded(msg tea.Msg) BoardColumn
 
 	// SelectedIssue returns the currently selected issue, if any.
-	SelectedIssue() *beads.Issue
+	SelectedIssue() *task.Issue
 
 	// Update handles messages and returns the updated column and any command.
 	Update(msg tea.Msg) (BoardColumn, tea.Cmd)
@@ -94,7 +93,7 @@ func (d issueDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
 }
 
 // renderIssueLine returns the rendered line for an issue (used by both Render and width calculation).
-func renderIssueLine(issue beads.Issue, isSelected bool) string {
+func renderIssueLine(issue task.Issue, isSelected bool) string {
 	return issuebadge.Render(issue, issuebadge.Config{
 		ShowSelection: true,
 		Selected:      isSelected,
@@ -102,7 +101,7 @@ func renderIssueLine(issue beads.Issue, isSelected bool) string {
 }
 
 // itemRenderedLines returns how many lines an issue takes when rendered at the given width.
-func itemRenderedLines(issue beads.Issue, width int) int {
+func itemRenderedLines(issue task.Issue, width int) int {
 	line := renderIssueLine(issue, false)
 	lineWidth := lipgloss.Width(line)
 	if lineWidth <= width || width <= 0 {
@@ -144,16 +143,16 @@ type Column struct {
 	columnIndexPtr *int                   // pointer for delegate (survives value copies)
 	color          lipgloss.TerminalColor // custom color for column border/title
 	list           list.Model
-	items          []beads.Issue
+	items          []task.Issue
 	width          int
 	height         int
 	focused        *bool // pointer so it survives value copies
 	showCounts     *bool // pointer so it survives value copies (nil = default true)
 
 	// BQL self-loading fields
-	executor  bql.BQLExecutor // BQL executor for loading issues
-	query     string          // BQL query for this column
-	loadError error           // error from last load attempt
+	executor  task.QueryExecutor // BQL executor for loading issues
+	query     string             // BQL query for this column
+	loadError error              // error from last load attempt
 }
 
 // NewColumn creates a new column.
@@ -181,7 +180,7 @@ func NewColumn(title string) Column {
 }
 
 // NewColumnWithExecutor creates a column that can load its own data via BQL.
-func NewColumnWithExecutor(title string, query string, executor bql.BQLExecutor) Column {
+func NewColumnWithExecutor(title string, query string, executor task.QueryExecutor) Column {
 	col := NewColumn(title)
 	col.executor = executor
 	col.query = query
@@ -190,11 +189,11 @@ func NewColumnWithExecutor(title string, query string, executor bql.BQLExecutor)
 
 // ColumnLoadedMsg is sent when a column finishes loading its issues.
 type ColumnLoadedMsg struct {
-	ViewIndex   int           // which view this column belongs to
-	ColumnIndex int           // which column within the view
-	ColumnTitle string        // kept for debugging/logging
-	Issues      []beads.Issue // loaded issues (nil if error)
-	Err         error         // error if load failed
+	ViewIndex   int          // which view this column belongs to
+	ColumnIndex int          // which column within the view
+	ColumnTitle string       // kept for debugging/logging
+	Issues      []task.Issue // loaded issues (nil if error)
+	Err         error        // error if load failed
 }
 
 // LoadIssues executes the BQL query and returns the column with loaded issues.
@@ -298,7 +297,7 @@ func (c Column) SetQuery(query string) Column {
 }
 
 // SetExecutor sets the BQL executor for this column.
-func (c Column) SetExecutor(executor bql.BQLExecutor) Column {
+func (c Column) SetExecutor(executor task.QueryExecutor) Column {
 	c.executor = executor
 	return c
 }
@@ -326,7 +325,7 @@ func (c Column) SetFocused(focused bool) BoardColumn {
 }
 
 // SetItems populates the column with issues.
-func (c Column) SetItems(issues []beads.Issue) Column {
+func (c Column) SetItems(issues []task.Issue) Column {
 	c.items = issues
 	items := make([]list.Item, len(issues))
 	for i := range issues {
@@ -386,7 +385,7 @@ func (c Column) SetShowCounts(show bool) BoardColumn {
 }
 
 // SelectedItem returns the currently selected issue.
-func (c Column) SelectedItem() *beads.Issue {
+func (c Column) SelectedItem() *task.Issue {
 	if item := c.list.SelectedItem(); item != nil {
 		issueItem := item.(IssueItem)
 		return issueItem.Issue
@@ -396,12 +395,12 @@ func (c Column) SelectedItem() *beads.Issue {
 
 // SelectedIssue returns the currently selected issue.
 // Implements BoardColumn interface.
-func (c Column) SelectedIssue() *beads.Issue {
+func (c Column) SelectedIssue() *task.Issue {
 	return c.SelectedItem()
 }
 
 // Items returns all issues in the column.
-func (c Column) Items() []beads.Issue {
+func (c Column) Items() []task.Issue {
 	return c.items
 }
 

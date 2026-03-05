@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/board"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
@@ -33,11 +33,11 @@ func createTestModel(t *testing.T) Model {
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	services := mode.Services{
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Executor:  mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		QueryExecutor: mockExecutor,
 	}
 
 	return Model{
@@ -49,13 +49,13 @@ func createTestModel(t *testing.T) Model {
 }
 
 func TestCreateDeleteModal_RegularIssue(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	// No expectations needed - Execute won't be called for non-epic
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "test-456",
 		TitleText: "Issue to Delete",
-		Type:      beads.TypeTask,
+		Type:      task.TypeTask,
 	}
 
 	modal, issueIDs := shared.CreateDeleteModal(issue, mockExecutor)
@@ -65,13 +65,13 @@ func TestCreateDeleteModal_RegularIssue(t *testing.T) {
 }
 
 func TestCreateDeleteModal_EpicWithoutChildren(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 	// No expectations needed - Execute won't be called for epic without children
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Epic Without Children",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Children:  []string{}, // No children
 	}
 
@@ -82,18 +82,18 @@ func TestCreateDeleteModal_EpicWithoutChildren(t *testing.T) {
 }
 
 func TestCreateDeleteModal_EpicWithChildren(t *testing.T) {
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{
-		{ID: "epic-1", Type: beads.TypeEpic, TitleText: "Epic With Children"},
-		{ID: "task-1", Type: beads.TypeTask, TitleText: "Child 1"},
-		{ID: "task-2", Type: beads.TypeTask, TitleText: "Child 2"},
-		{ID: "task-3", Type: beads.TypeTask, TitleText: "Child 3"},
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{
+		{ID: "epic-1", Type: task.TypeEpic, TitleText: "Epic With Children"},
+		{ID: "task-1", Type: task.TypeTask, TitleText: "Child 1"},
+		{ID: "task-2", Type: task.TypeTask, TitleText: "Child 2"},
+		{ID: "task-3", Type: task.TypeTask, TitleText: "Child 3"},
 	}, nil)
 
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "epic-1",
 		TitleText: "Epic With Children",
-		Type:      beads.TypeEpic,
+		Type:      task.TypeEpic,
 		Children:  []string{"task-1", "task-2", "task-3"},
 	}
 
@@ -129,8 +129,8 @@ func createTestModelWithIssue(issueID string, query string) Model {
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
-			{ID: issueID, TitleText: "Test Issue", Type: beads.TypeTask},
+		Issues: []task.Issue{
+			{ID: issueID, TitleText: "Test Issue", Type: task.TypeTask},
 		},
 		Err: nil,
 	})
@@ -148,11 +148,11 @@ func createTestModelWithIssue(issueID string, query string) Model {
 func createRefreshTestModel(t *testing.T, columns []config.ColumnConfig) Model {
 	cfg := config.Defaults()
 	cfg.Views = []config.ViewConfig{{Name: "Test", Columns: columns}}
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	services := mode.Services{
-		Config:   &cfg,
-		Executor: mockExecutor,
+		Config:        &cfg,
+		QueryExecutor: mockExecutor,
 	}
 
 	brd := board.NewFromViews(cfg.GetViews(), mockExecutor, nil).SetSize(100, 40)
@@ -166,7 +166,7 @@ func createRefreshTestModel(t *testing.T, columns []config.ColumnConfig) Model {
 }
 
 // seedBoardColumn loads test issues into a board column via a ColumnLoadedMsg.
-func seedBoardColumn(brd board.Model, columnIndex int, columnTitle string, issues []beads.Issue) board.Model {
+func seedBoardColumn(brd board.Model, columnIndex int, columnTitle string, issues []task.Issue) board.Model {
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnIndex: columnIndex,
@@ -386,14 +386,14 @@ func TestKanban_CtrlE_MessageContainsIssueData(t *testing.T) {
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
+		Issues: []task.Issue{
 			{
 				ID:        "issue-456",
 				TitleText: "Test Issue With Data",
-				Type:      beads.TypeTask,
+				Type:      task.TypeTask,
 				Labels:    []string{"bug", "urgent", "p0"},
-				Priority:  beads.PriorityHigh,
-				Status:    beads.StatusInProgress,
+				Priority:  task.PriorityHigh,
+				Status:    task.StatusInProgress,
 			},
 		},
 		Err: nil,
@@ -419,8 +419,8 @@ func TestKanban_CtrlE_MessageContainsIssueData(t *testing.T) {
 	require.True(t, ok, "expected OpenEditMenuMsg, got %T", result)
 	require.Equal(t, "issue-456", editMsg.Issue.ID, "IssueID should match")
 	require.Equal(t, []string{"bug", "urgent", "p0"}, editMsg.Issue.Labels, "Labels should match")
-	require.Equal(t, beads.PriorityHigh, editMsg.Issue.Priority, "Priority should match")
-	require.Equal(t, beads.StatusInProgress, editMsg.Issue.Status, "Status should match")
+	require.Equal(t, task.PriorityHigh, editMsg.Issue.Priority, "Priority should match")
+	require.Equal(t, task.StatusInProgress, editMsg.Issue.Status, "Status should match")
 }
 
 func TestKanban_CtrlE_SaveMsg_ReturnsToBoardView(t *testing.T) {
@@ -444,8 +444,8 @@ func TestKanban_CtrlE_SaveMsg_ReturnsToBoardView(t *testing.T) {
 	// Process SaveMsg
 	saveMsg := issueeditor.SaveMsg{
 		IssueID:  "test-123",
-		Priority: beads.PriorityHigh,
-		Status:   beads.StatusInProgress,
+		Priority: task.PriorityHigh,
+		Status:   task.StatusInProgress,
 		Labels:   []string{"updated"},
 	}
 	m, cmd = m.Update(saveMsg)
@@ -508,12 +508,12 @@ func TestHandleBoardKey_Dashboard(t *testing.T) {
 	cfg := config.Defaults()
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	services := mode.Services{
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Executor:  mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		QueryExecutor: mockExecutor,
 	}
 
 	m := Model{
@@ -565,8 +565,8 @@ func TestKanban_ClickOpensTreeView(t *testing.T) {
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
-			{ID: issueID, TitleText: "Test Issue for Click", Type: beads.TypeTask, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: issueID, TitleText: "Test Issue for Click", Type: task.TypeTask, Status: task.StatusOpen},
 		},
 	})
 
@@ -649,8 +649,8 @@ func TestKanban_ClickBehaviorMatchesEnterKey(t *testing.T) {
 	brd1, _ = brd1.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
-			{ID: issueID, TitleText: "Test Issue", Type: beads.TypeTask, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: issueID, TitleText: "Test Issue", Type: task.TypeTask, Status: task.StatusOpen},
 		},
 	})
 
@@ -667,8 +667,8 @@ func TestKanban_ClickBehaviorMatchesEnterKey(t *testing.T) {
 	brd2, _ = brd2.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnTitle: "Test",
-		Issues: []beads.Issue{
-			{ID: issueID, TitleText: "Test Issue", Type: beads.TypeTask, Status: beads.StatusOpen},
+		Issues: []task.Issue{
+			{ID: issueID, TitleText: "Test Issue", Type: task.TypeTask, Status: task.StatusOpen},
 		},
 	})
 
@@ -751,24 +751,24 @@ func TestKanban_KeyboardNavigationUnchanged(t *testing.T) {
 		ViewIndex:   0,
 		ColumnIndex: 0,
 		ColumnTitle: "Col1",
-		Issues: []beads.Issue{
-			{ID: "issue-1", TitleText: "Issue 1", Type: beads.TypeTask},
+		Issues: []task.Issue{
+			{ID: "issue-1", TitleText: "Issue 1", Type: task.TypeTask},
 		},
 	})
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnIndex: 1,
 		ColumnTitle: "Col2",
-		Issues: []beads.Issue{
-			{ID: "issue-2", TitleText: "Issue 2", Type: beads.TypeTask},
+		Issues: []task.Issue{
+			{ID: "issue-2", TitleText: "Issue 2", Type: task.TypeTask},
 		},
 	})
 	brd, _ = brd.Update(board.ColumnLoadedMsg{
 		ViewIndex:   0,
 		ColumnIndex: 2,
 		ColumnTitle: "Col3",
-		Issues: []beads.Issue{
-			{ID: "issue-3", TitleText: "Issue 3", Type: beads.TypeTask},
+		Issues: []task.Issue{
+			{ID: "issue-3", TitleText: "Issue 3", Type: task.TypeTask},
 		},
 	})
 
@@ -813,13 +813,13 @@ func createTestModelWithActions(t *testing.T, actions map[string]config.ActionCo
 
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
-	mockExecutor := mocks.NewMockBQLExecutor(t)
+	mockExecutor := mocks.NewMockQueryExecutor(t)
 
 	services := mode.Services{
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Executor:  mockExecutor,
-		WorkDir:   t.TempDir(),
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		QueryExecutor: mockExecutor,
+		WorkDir:       t.TempDir(),
 	}
 
 	boardConfigs := []config.ColumnConfig{
@@ -831,8 +831,8 @@ func createTestModelWithActions(t *testing.T, actions map[string]config.ActionCo
 		brd, _ = brd.Update(board.ColumnLoadedMsg{
 			ViewIndex:   0,
 			ColumnTitle: "Test",
-			Issues: []beads.Issue{
-				{ID: "test-123", TitleText: "Test Issue", Type: beads.TypeTask, Status: beads.StatusOpen},
+			Issues: []task.Issue{
+				{ID: "test-123", TitleText: "Test Issue", Type: task.TypeTask, Status: task.StatusOpen},
 			},
 		})
 	}
@@ -1106,11 +1106,11 @@ func TestKanban_SaveMsg_DispatchesSingleSaveIssueCmd(t *testing.T) {
 	m := createTestModelWithIssue("test-123", "status = open")
 
 	// Set up mock executor expecting single UpdateIssue call
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-123", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-123", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Title != nil && *opts.Title == "New Title"
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Get selected issue and set original title
 	issue := m.board.SelectedIssue()
@@ -1151,7 +1151,7 @@ func TestKanban_HandleIssueSaved_Success(t *testing.T) {
 	// handleIssueSaved on success should save cursor and invalidate views
 	msg := issueSavedMsg{
 		issueID: "test-123",
-		opts:    beads.UpdateIssueOptions{},
+		opts:    task.UpdateOptions{},
 		err:     nil,
 	}
 	m, _ = m.handleIssueSaved(msg)
@@ -1166,10 +1166,10 @@ func TestKanban_RefreshFromConfig_PreservesSelectedIssue(t *testing.T) {
 	}
 	m := createRefreshTestModel(t, columns)
 
-	issues := []beads.Issue{
-		{ID: "task-1", TitleText: "Task 1", Type: beads.TypeTask},
-		{ID: "task-2", TitleText: "Task 2", Type: beads.TypeTask},
-		{ID: "task-3", TitleText: "Task 3", Type: beads.TypeTask},
+	issues := []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
+		{ID: "task-2", TitleText: "Task 2", Type: task.TypeTask},
+		{ID: "task-3", TitleText: "Task 3", Type: task.TypeTask},
 	}
 	m.board = seedBoardColumn(m.board, 0, "In Progress", issues)
 
@@ -1203,12 +1203,12 @@ func TestKanban_RefreshFromConfig_RestoresAfterLaterColumnLoad(t *testing.T) {
 		{Name: "In Progress", Query: "status = in_progress", Color: "#888888"},
 	}
 	m := createRefreshTestModel(t, columns)
-	col0Issues := []beads.Issue{
-		{ID: "task-1", TitleText: "Task 1", Type: beads.TypeTask},
+	col0Issues := []task.Issue{
+		{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask},
 	}
-	col1Issues := []beads.Issue{
-		{ID: "task-2", TitleText: "Task 2", Type: beads.TypeTask},
-		{ID: "task-3", TitleText: "Task 3", Type: beads.TypeTask},
+	col1Issues := []task.Issue{
+		{ID: "task-2", TitleText: "Task 2", Type: task.TypeTask},
+		{ID: "task-3", TitleText: "Task 3", Type: task.TypeTask},
 	}
 	m.board = seedBoardColumn(m.board, 0, "Todo", col0Issues)
 	m.board = seedBoardColumn(m.board, 1, "In Progress", col1Issues)
@@ -1251,13 +1251,13 @@ func TestKanban_RefreshFromConfig_ClearsPendingWhenIssueMissing(t *testing.T) {
 		{Name: "In Progress", Query: "status = in_progress", Color: "#888888"},
 	}
 	m := createRefreshTestModel(t, columns)
-	initialCol0 := []beads.Issue{{ID: "task-1", TitleText: "Task 1", Type: beads.TypeTask}}
-	initialCol1 := []beads.Issue{
-		{ID: "task-2", TitleText: "Task 2", Type: beads.TypeTask},
-		{ID: "task-3", TitleText: "Task 3", Type: beads.TypeTask},
+	initialCol0 := []task.Issue{{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask}}
+	initialCol1 := []task.Issue{
+		{ID: "task-2", TitleText: "Task 2", Type: task.TypeTask},
+		{ID: "task-3", TitleText: "Task 3", Type: task.TypeTask},
 	}
-	reloadedCol0 := []beads.Issue{{ID: "task-1", TitleText: "Task 1", Type: beads.TypeTask}}
-	reloadedCol1 := []beads.Issue{{ID: "task-2", TitleText: "Task 2", Type: beads.TypeTask}} // task-3 removed
+	reloadedCol0 := []task.Issue{{ID: "task-1", TitleText: "Task 1", Type: task.TypeTask}}
+	reloadedCol1 := []task.Issue{{ID: "task-2", TitleText: "Task 2", Type: task.TypeTask}} // task-3 removed
 
 	m.board = seedBoardColumn(m.board, 0, "Todo", initialCol0)
 	m.board = seedBoardColumn(m.board, 1, "In Progress", initialCol1)
@@ -1294,7 +1294,7 @@ func TestKanban_HandleIssueSaved_Error(t *testing.T) {
 	// handleIssueSaved on error should return ShowToastMsg
 	msg := issueSavedMsg{
 		issueID: "test-123",
-		opts:    beads.UpdateIssueOptions{},
+		opts:    task.UpdateOptions{},
 		err:     errors.New("database error"),
 	}
 	m, cmd := m.handleIssueSaved(msg)
@@ -1312,29 +1312,29 @@ func TestKanban_SaveMsg_NoChanges(t *testing.T) {
 	// When nothing changed, UpdateIssue is still called with all-nil opts (no-op)
 	m := createTestModel(t)
 
-	m.editingIssue = &beads.Issue{
+	m.editingIssue = &task.Issue{
 		ID:              "test-issue",
 		TitleText:       "Test Issue",
 		DescriptionText: "Test description",
 		Notes:           "original notes",
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		Labels:          []string{},
 	}
 	m.view = ViewEditIssue
 
 	// Set up mock expecting UpdateIssue with all-nil opts
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-issue", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-issue", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Title == nil && opts.Description == nil && opts.Notes == nil &&
 			opts.Priority == nil && opts.Status == nil && opts.Labels == nil
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	m, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:     "test-issue",
-		Priority:    beads.PriorityMedium,
-		Status:      beads.StatusOpen,
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
 		Labels:      []string{},
 		Title:       "Test Issue",
 		Description: "Test description",
@@ -1354,7 +1354,7 @@ func TestKanban_SaveMsg_NoChanges(t *testing.T) {
 func TestKanban_SaveMsg_ClearsEditingIssue(t *testing.T) {
 	m := createTestModel(t)
 
-	m.editingIssue = &beads.Issue{
+	m.editingIssue = &task.Issue{
 		ID:        "test-issue",
 		TitleText: "Test Issue",
 	}
@@ -1363,8 +1363,8 @@ func TestKanban_SaveMsg_ClearsEditingIssue(t *testing.T) {
 	m, _ = m.Update(issueeditor.SaveMsg{
 		IssueID:  "test-issue",
 		Title:    "Test Issue",
-		Priority: beads.PriorityMedium,
-		Status:   beads.StatusOpen,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
 		Labels:   []string{},
 	})
 
@@ -1396,11 +1396,11 @@ func TestKanban_SaveIssueCmd_CallsUpdateIssue(t *testing.T) {
 	m := createTestModel(t)
 
 	title := "New Title"
-	opts := beads.UpdateIssueOptions{Title: &title}
+	opts := task.UpdateOptions{Title: &title}
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().UpdateIssue("test-issue", opts).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	cmd := m.saveIssueCmd("test-issue", opts)
 	require.NotNil(t, cmd)
@@ -1417,11 +1417,11 @@ func TestKanban_SaveIssueCmd_CallsUpdateIssue(t *testing.T) {
 func TestKanban_SaveIssueCmd_PropagatesErrors(t *testing.T) {
 	m := createTestModel(t)
 
-	opts := beads.UpdateIssueOptions{}
+	opts := task.UpdateOptions{}
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
 	mockExecutor.EXPECT().UpdateIssue("test-issue", opts).Return(errors.New("update failed"))
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	cmd := m.saveIssueCmd("test-issue", opts)
 	require.NotNil(t, cmd)

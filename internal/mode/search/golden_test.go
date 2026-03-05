@@ -8,10 +8,10 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/stretchr/testify/mock"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 )
 
@@ -26,14 +26,14 @@ func createGoldenTestModel(t *testing.T) Model {
 	clock := mocks.NewMockClock(t)
 	clock.EXPECT().Now().Return(testNow).Maybe()
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
 	services := mode.Services{
-		Client:    mockClient,
-		Config:    &cfg,
-		Clipboard: clipboard,
-		Clock:     clock,
+		TaskExecutor: mockTaskExec,
+		Config:       &cfg,
+		Clipboard:    clipboard,
+		Clock:        clock,
 	}
 
 	m := New(services)
@@ -81,18 +81,18 @@ func TestSearch_View_Golden_WithResults(t *testing.T) {
 	m = m.SetSize(100, 30)
 
 	// Load some results with timestamps and comments
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{
-			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeFeature,
+			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: task.StatusOpen, Type: task.TypeFeature,
 			CreatedAt:    testNow.Add(-10 * time.Hour), // 10h ago
 			CommentCount: 3,                            // 3 comments
 		},
 		{
-			ID: "bd-c2d", TitleText: "Fix crash on startup", Priority: 0, Status: beads.StatusInProgress, Type: beads.TypeBug,
+			ID: "bd-c2d", TitleText: "Fix crash on startup", Priority: 0, Status: task.StatusInProgress, Type: task.TypeBug,
 			CreatedAt: testNow.Add(-3 * 24 * time.Hour), // 3d ago
 		},
 		{
-			ID: "bd-e3f", TitleText: "Add unit tests", Priority: 2, Status: beads.StatusOpen, Type: beads.TypeTask,
+			ID: "bd-e3f", TitleText: "Add unit tests", Priority: 2, Status: task.StatusOpen, Type: task.TypeTask,
 			CreatedAt:    testNow.Add(-2 * 7 * 24 * time.Hour), // 2w ago
 			CommentCount: 1,                                    // 1 comment
 		},
@@ -123,7 +123,7 @@ func TestSearch_View_Golden_NoResults(t *testing.T) {
 	m.input.SetValue("status = closed")
 
 	// Simulate empty result
-	m, _ = m.handleSearchResults(searchResultsMsg{issues: []beads.Issue{}, err: nil})
+	m, _ = m.handleSearchResults(searchResultsMsg{issues: []task.Issue{}, err: nil})
 
 	view := m.View()
 	teatest.RequireEqualOutput(t, []byte(view))
@@ -134,13 +134,13 @@ func TestSearch_View_Golden_Wide(t *testing.T) {
 	m = m.SetSize(200, 40)
 
 	// Load some results with timestamps
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{
-			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeFeature,
+			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: task.StatusOpen, Type: task.TypeFeature,
 			CreatedAt: testNow.Add(-5 * time.Minute), // 5m ago
 		},
 		{
-			ID: "bd-c2d", TitleText: "Fix crash on startup", Priority: 0, Status: beads.StatusInProgress, Type: beads.TypeBug,
+			ID: "bd-c2d", TitleText: "Fix crash on startup", Priority: 0, Status: task.StatusInProgress, Type: task.TypeBug,
 			CreatedAt:    testNow.Add(-6 * 30 * 24 * time.Hour), // 6mo ago
 			CommentCount: 2,                                     // 2 comments
 		},
@@ -156,9 +156,9 @@ func TestSearch_View_Golden_Narrow(t *testing.T) {
 	m = m.SetSize(80, 24)
 
 	// Load some results with timestamp (narrow width should truncate title)
-	issues := []beads.Issue{
+	issues := []task.Issue{
 		{
-			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeFeature,
+			ID: "bd-a1b", TitleText: "Implement webhook system", Priority: 1, Status: task.StatusOpen, Type: task.TypeFeature,
 			CreatedAt: testNow.Add(-1 * time.Hour), // 1h ago
 		},
 	}

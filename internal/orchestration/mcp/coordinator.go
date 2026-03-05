@@ -7,14 +7,13 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	fabricmcp "github.com/zjrosen/perles/internal/orchestration/fabric/mcp"
 	"github.com/zjrosen/perles/internal/orchestration/v2/adapter"
 	"github.com/zjrosen/perles/internal/orchestration/v2/repository"
 	"github.com/zjrosen/perles/internal/orchestration/validation"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // CoordinatorServer is an MCP server that exposes orchestration tools to the coordinator agent.
@@ -22,8 +21,8 @@ import (
 type CoordinatorServer struct {
 	*Server
 	workDir       string
-	port          int                    // HTTP server port for MCP config generation
-	beadsExecutor appbeads.IssueExecutor // BD command executor
+	port          int                  // HTTP server port for MCP config generation
+	beadsExecutor taskpkg.TaskExecutor // BD command executor
 
 	// dedup tracks recent messages to prevent duplicate sends to workers
 	dedup *MessageDeduplicator
@@ -42,7 +41,7 @@ type CoordinatorServer struct {
 func NewCoordinatorServer(
 	workDir string,
 	port int,
-	beadsExec appbeads.IssueExecutor,
+	beadsExec taskpkg.TaskExecutor,
 ) *CoordinatorServer {
 	return NewCoordinatorServerWithV2Adapter(workDir, port, beadsExec, nil)
 }
@@ -52,7 +51,7 @@ func NewCoordinatorServer(
 func NewCoordinatorServerWithV2Adapter(
 	workDir string,
 	port int,
-	beadsExec appbeads.IssueExecutor,
+	beadsExec taskpkg.TaskExecutor,
 	v2Adapter *adapter.V2Adapter,
 ) *CoordinatorServer {
 	cs := &CoordinatorServer{
@@ -606,7 +605,7 @@ func (cs *CoordinatorServer) handleGetTaskStatus(_ context.Context, rawArgs json
 	}
 
 	// Return the issue as JSON wrapped in an array (for backward compatibility with bd show output)
-	data, err := json.MarshalIndent([]*beads.Issue{issue}, "", "  ")
+	data, err := json.MarshalIndent([]*taskpkg.Issue{issue}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshaling issue: %w", err)
 	}

@@ -8,7 +8,7 @@ import (
 
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	"github.com/zjrosen/perles/internal/task"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -23,20 +23,20 @@ func TestMain(m *testing.M) {
 // --- BuildUpdateOptions tests ---
 
 func TestBuildUpdateOptions_AllFieldsChanged(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText:       "Old Title",
 		DescriptionText: "Old Desc",
 		Notes:           "Old Notes",
-		Priority:        beads.PriorityLow,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityLow,
+		Status:          task.StatusOpen,
 		Labels:          []string{"old-label"},
 	}
 	msg := SaveMsg{
 		Title:       "New Title",
 		Description: "New Desc",
 		Notes:       "New Notes",
-		Priority:    beads.PriorityHigh,
-		Status:      beads.StatusClosed,
+		Priority:    task.PriorityHigh,
+		Status:      task.StatusClosed,
 		Labels:      []string{"new-label"},
 	}
 
@@ -49,28 +49,28 @@ func TestBuildUpdateOptions_AllFieldsChanged(t *testing.T) {
 	require.NotNil(t, opts.Notes)
 	require.Equal(t, "New Notes", *opts.Notes)
 	require.NotNil(t, opts.Priority)
-	require.Equal(t, beads.PriorityHigh, *opts.Priority)
+	require.Equal(t, task.PriorityHigh, *opts.Priority)
 	require.NotNil(t, opts.Status)
-	require.Equal(t, beads.StatusClosed, *opts.Status)
+	require.Equal(t, task.StatusClosed, *opts.Status)
 	require.NotNil(t, opts.Labels)
 	require.Equal(t, []string{"new-label"}, *opts.Labels)
 }
 
 func TestBuildUpdateOptions_NoFieldsChanged(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText:       "Same Title",
 		DescriptionText: "Same Desc",
 		Notes:           "Same Notes",
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		Labels:          []string{"bug", "feature"},
 	}
 	msg := SaveMsg{
 		Title:       "Same Title",
 		Description: "Same Desc",
 		Notes:       "Same Notes",
-		Priority:    beads.PriorityMedium,
-		Status:      beads.StatusOpen,
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
 		Labels:      []string{"bug", "feature"},
 	}
 
@@ -85,20 +85,20 @@ func TestBuildUpdateOptions_NoFieldsChanged(t *testing.T) {
 }
 
 func TestBuildUpdateOptions_SingleFieldChanged(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText:       "Original",
 		DescriptionText: "Desc",
 		Notes:           "Notes",
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 		Labels:          []string{"bug"},
 	}
 	msg := SaveMsg{
 		Title:       "Changed Title",
 		Description: "Desc",
 		Notes:       "Notes",
-		Priority:    beads.PriorityMedium,
-		Status:      beads.StatusOpen,
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
 		Labels:      []string{"bug"},
 	}
 
@@ -118,8 +118,8 @@ func TestBuildUpdateOptions_NilOriginalFallback(t *testing.T) {
 		Title:       "Title",
 		Description: "Desc",
 		Notes:       "Notes",
-		Priority:    beads.PriorityHigh,
-		Status:      beads.StatusInProgress,
+		Priority:    task.PriorityHigh,
+		Status:      task.StatusInProgress,
 		Labels:      []string{"label"},
 	}
 
@@ -132,15 +132,15 @@ func TestBuildUpdateOptions_NilOriginalFallback(t *testing.T) {
 	require.NotNil(t, opts.Notes)
 	require.Equal(t, "Notes", *opts.Notes)
 	require.NotNil(t, opts.Priority)
-	require.Equal(t, beads.PriorityHigh, *opts.Priority)
+	require.Equal(t, task.PriorityHigh, *opts.Priority)
 	require.NotNil(t, opts.Status)
-	require.Equal(t, beads.StatusInProgress, *opts.Status)
+	require.Equal(t, task.StatusInProgress, *opts.Status)
 	require.NotNil(t, opts.Labels)
 	require.Equal(t, []string{"label"}, *opts.Labels)
 }
 
 func TestBuildUpdateOptions_LabelsChanged(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText: "T",
 		Labels:    []string{"bug", "feature"},
 	}
@@ -157,7 +157,7 @@ func TestBuildUpdateOptions_LabelsChanged(t *testing.T) {
 }
 
 func TestBuildUpdateOptions_LabelsUnchanged(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText: "T",
 		Labels:    []string{"bug", "feature"},
 	}
@@ -172,7 +172,7 @@ func TestBuildUpdateOptions_LabelsUnchanged(t *testing.T) {
 }
 
 func TestBuildUpdateOptions_LabelsEmptyVsPopulated(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText: "T",
 		Labels:    []string{"bug"},
 	}
@@ -188,15 +188,15 @@ func TestBuildUpdateOptions_LabelsEmptyVsPopulated(t *testing.T) {
 }
 
 func TestBuildUpdateOptions_ValueTypesUseAddressOfCopy(t *testing.T) {
-	original := &beads.Issue{
+	original := &task.Issue{
 		TitleText: "T",
-		Priority:  beads.PriorityLow,
-		Status:    beads.StatusOpen,
+		Priority:  task.PriorityLow,
+		Status:    task.StatusOpen,
 	}
 	msg := SaveMsg{
 		Title:    "T",
-		Priority: beads.PriorityHigh,
-		Status:   beads.StatusClosed,
+		Priority: task.PriorityHigh,
+		Status:   task.StatusClosed,
 	}
 
 	opts := msg.BuildUpdateOptions(original)
@@ -206,45 +206,45 @@ func TestBuildUpdateOptions_ValueTypesUseAddressOfCopy(t *testing.T) {
 
 	// Verify the pointers point to independent copies, not the SaveMsg fields.
 	// Mutating the returned values should not affect msg.
-	*opts.Priority = beads.PriorityBacklog
-	*opts.Status = beads.StatusDeferred
-	require.Equal(t, beads.PriorityHigh, msg.Priority, "mutating opts.Priority must not affect SaveMsg")
-	require.Equal(t, beads.StatusClosed, msg.Status, "mutating opts.Status must not affect SaveMsg")
+	*opts.Priority = task.PriorityBacklog
+	*opts.Status = task.StatusDeferred
+	require.Equal(t, task.PriorityHigh, msg.Priority, "mutating opts.Priority must not affect SaveMsg")
+	require.Equal(t, task.StatusClosed, msg.Status, "mutating opts.Status must not affect SaveMsg")
 }
 
-// testIssue creates a beads.Issue for testing with the given parameters.
-func testIssue(id string, labels []string, priority beads.Priority, status beads.Status) beads.Issue {
-	return beads.Issue{
+// testIssue creates a task.Issue for testing with the given parameters.
+func testIssue(id string, labels []string, priority task.Priority, status task.Status) task.Issue {
+	return task.Issue{
 		ID:        id,
 		TitleText: "Test Issue Title",
-		Type:      beads.TypeTask,
+		Type:      task.TypeTask,
 		Labels:    labels,
 		Priority:  priority,
 		Status:    status,
 	}
 }
 
-// testIssueWithDescription creates a beads.Issue with title and description for testing.
-func testIssueWithDescription(id, title, description string, labels []string, priority beads.Priority, status beads.Status) beads.Issue {
-	return beads.Issue{
+// testIssueWithDescription creates a task.Issue with title and description for testing.
+func testIssueWithDescription(id, title, description string, labels []string, priority task.Priority, status task.Status) task.Issue {
+	return task.Issue{
 		ID:              id,
 		TitleText:       title,
 		DescriptionText: description,
-		Type:            beads.TypeTask,
+		Type:            task.TypeTask,
 		Labels:          labels,
 		Priority:        priority,
 		Status:          status,
 	}
 }
 
-// testIssueWithNotes creates a beads.Issue with title, description, and notes for testing.
-func testIssueWithNotes(id, title, description, notes string, labels []string, priority beads.Priority, status beads.Status) beads.Issue {
-	return beads.Issue{
+// testIssueWithNotes creates a task.Issue with title, description, and notes for testing.
+func testIssueWithNotes(id, title, description, notes string, labels []string, priority task.Priority, status task.Status) task.Issue {
+	return task.Issue{
 		ID:              id,
 		TitleText:       title,
 		DescriptionText: description,
 		Notes:           notes,
-		Type:            beads.TypeTask,
+		Type:            task.TypeTask,
 		Labels:          labels,
 		Priority:        priority,
 		Status:          status,
@@ -253,7 +253,7 @@ func testIssueWithNotes(id, title, description, notes string, labels []string, p
 
 func TestNew_InitializesFormModalWithCorrectFields(t *testing.T) {
 	labels := []string{"bug", "feature"}
-	issue := testIssue("test-123", labels, beads.PriorityHigh, beads.StatusOpen)
+	issue := testIssue("test-123", labels, task.PriorityHigh, task.StatusOpen)
 	m := New(issue)
 
 	require.Equal(t, "test-123", m.issue.ID, "expected issue ID to be set")
@@ -267,7 +267,7 @@ func TestNew_InitializesFormModalWithCorrectFields(t *testing.T) {
 }
 
 func TestPriorityListOptions_Returns5Options(t *testing.T) {
-	opts := priorityListOptions(beads.PriorityMedium)
+	opts := priorityListOptions(task.PriorityMedium)
 
 	require.Len(t, opts, 5, "expected 5 priority options")
 
@@ -298,14 +298,14 @@ func TestPriorityListOptions_Returns5Options(t *testing.T) {
 
 func TestPriorityListOptions_SelectsCorrectPriority(t *testing.T) {
 	tests := []struct {
-		priority      beads.Priority
+		priority      task.Priority
 		expectedIndex int
 	}{
-		{beads.PriorityCritical, 0},
-		{beads.PriorityHigh, 1},
-		{beads.PriorityMedium, 2},
-		{beads.PriorityLow, 3},
-		{beads.PriorityBacklog, 4},
+		{task.PriorityCritical, 0},
+		{task.PriorityHigh, 1},
+		{task.PriorityMedium, 2},
+		{task.PriorityLow, 3},
+		{task.PriorityBacklog, 4},
 	}
 
 	for _, tc := range tests {
@@ -321,7 +321,7 @@ func TestPriorityListOptions_SelectsCorrectPriority(t *testing.T) {
 }
 
 func TestStatusListOptions_Returns3Options(t *testing.T) {
-	opts := statusListOptions(beads.StatusOpen)
+	opts := statusListOptions(task.StatusOpen)
 
 	require.Len(t, opts, 5, "expected 5 status options")
 
@@ -344,12 +344,12 @@ func TestStatusListOptions_Returns3Options(t *testing.T) {
 
 func TestStatusListOptions_SelectsCorrectStatus(t *testing.T) {
 	tests := []struct {
-		status        beads.Status
+		status        task.Status
 		expectedIndex int
 	}{
-		{beads.StatusOpen, 0},
-		{beads.StatusInProgress, 1},
-		{beads.StatusClosed, 2},
+		{task.StatusOpen, 0},
+		{task.StatusInProgress, 1},
+		{task.StatusClosed, 2},
 	}
 
 	for _, tc := range tests {
@@ -384,7 +384,7 @@ func TestLabelsListOptions_EmptyLabels(t *testing.T) {
 }
 
 func TestSaveMsg_ContainsCorrectParsedValues(t *testing.T) {
-	issue := testIssue("test-123", []string{"existing"}, beads.PriorityHigh, beads.StatusInProgress)
+	issue := testIssue("test-123", []string{"existing"}, task.PriorityHigh, task.StatusInProgress)
 	m := New(issue)
 
 	// Navigate to submit button and press Enter
@@ -407,13 +407,13 @@ func TestSaveMsg_ContainsCorrectParsedValues(t *testing.T) {
 	require.Equal(t, "test-123", saveMsg.IssueID, "expected correct issue ID")
 	require.Equal(t, "Test Issue Title", saveMsg.Title, "expected correct title")
 	require.Equal(t, "", saveMsg.Description, "expected empty description")
-	require.Equal(t, beads.PriorityHigh, saveMsg.Priority, "expected Priority 1 (High)")
-	require.Equal(t, beads.StatusInProgress, saveMsg.Status, "expected Status in_progress")
+	require.Equal(t, task.PriorityHigh, saveMsg.Priority, "expected Priority 1 (High)")
+	require.Equal(t, task.StatusInProgress, saveMsg.Status, "expected Status in_progress")
 	require.Contains(t, saveMsg.Labels, "existing", "expected existing label")
 }
 
 func TestCancelMsg_ProducedOnEsc(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Press Esc
@@ -428,17 +428,17 @@ func TestCancelMsg_ProducedOnEsc(t *testing.T) {
 func TestParsePriority(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected beads.Priority
+		expected task.Priority
 	}{
-		{"P0", beads.PriorityCritical},
-		{"P1", beads.PriorityHigh},
-		{"P2", beads.PriorityMedium},
-		{"P3", beads.PriorityLow},
-		{"P4", beads.PriorityBacklog},
-		{"invalid", beads.PriorityMedium}, // default
-		{"P", beads.PriorityMedium},       // too short
-		{"P99", beads.PriorityMedium},     // out of range
-		{"", beads.PriorityMedium},        // empty
+		{"P0", task.PriorityCritical},
+		{"P1", task.PriorityHigh},
+		{"P2", task.PriorityMedium},
+		{"P3", task.PriorityLow},
+		{"P4", task.PriorityBacklog},
+		{"invalid", task.PriorityMedium}, // default
+		{"P", task.PriorityMedium},       // too short
+		{"P99", task.PriorityMedium},     // out of range
+		{"", task.PriorityMedium},        // empty
 	}
 
 	for _, tc := range tests {
@@ -448,7 +448,7 @@ func TestParsePriority(t *testing.T) {
 }
 
 func TestNew_EmptyLabels_ProducesValidConfig(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// View should still render without errors
@@ -461,7 +461,7 @@ func TestNew_EmptyLabels_ProducesValidConfig(t *testing.T) {
 
 func TestNew_LabelsWithSpaces(t *testing.T) {
 	labels := []string{"hello world", "multi word label"}
-	issue := testIssue("test-123", labels, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", labels, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	view := m.View()
@@ -470,14 +470,14 @@ func TestNew_LabelsWithSpaces(t *testing.T) {
 }
 
 func TestInit_ReturnsNil(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	cmd := m.Init()
 	require.Nil(t, cmd, "expected Init to return nil")
 }
 
 func TestSetSize_ReturnsNewModel(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	m = m.SetSize(120, 40)
@@ -487,7 +487,7 @@ func TestSetSize_ReturnsNewModel(t *testing.T) {
 }
 
 func TestOverlay_RendersOverBackground(t *testing.T) {
-	issue := testIssue("test-123", []string{"bug"}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{"bug"}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(80, 24)
 
@@ -498,7 +498,7 @@ func TestOverlay_RendersOverBackground(t *testing.T) {
 }
 
 func TestView_ContainsAllPriorityOptions(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityCritical, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityCritical, task.StatusOpen)
 	m := New(issue)
 	view := m.View()
 
@@ -511,7 +511,7 @@ func TestView_ContainsAllPriorityOptions(t *testing.T) {
 }
 
 func TestView_ContainsAllStatusOptions(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	view := m.View()
 
@@ -523,7 +523,7 @@ func TestView_ContainsAllStatusOptions(t *testing.T) {
 
 func TestSaveMsg_PriorityChange(t *testing.T) {
 	// Start with P0 (Critical)
-	issue := testIssue("test-123", []string{}, beads.PriorityCritical, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityCritical, task.StatusOpen)
 	m := New(issue)
 
 	// Tab to Priority field first (starts on Title)
@@ -550,12 +550,12 @@ func TestSaveMsg_PriorityChange(t *testing.T) {
 	msg := cmd()
 	saveMsg, ok := msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg")
-	require.Equal(t, beads.PriorityMedium, saveMsg.Priority, "expected P2 (Medium)")
+	require.Equal(t, task.PriorityMedium, saveMsg.Priority, "expected P2 (Medium)")
 }
 
 func TestSaveMsg_StatusChange(t *testing.T) {
 	// Start with Open status
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab to Status field (Title -> Priority -> Status)
@@ -581,12 +581,12 @@ func TestSaveMsg_StatusChange(t *testing.T) {
 	msg := cmd()
 	saveMsg, ok := msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg")
-	require.Equal(t, beads.StatusInProgress, saveMsg.Status, "expected in_progress status")
+	require.Equal(t, task.StatusInProgress, saveMsg.Status, "expected in_progress status")
 }
 
 func TestSaveMsg_LabelsToggle(t *testing.T) {
 	labels := []string{"bug", "feature", "ui"}
-	issue := testIssue("test-123", labels, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", labels, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab to Labels (Title -> Priority -> Status -> Labels)
@@ -616,7 +616,7 @@ func TestSaveMsg_LabelsToggle(t *testing.T) {
 }
 
 func TestSaveMsg_AddNewLabel(t *testing.T) {
-	issue := testIssue("test-123", []string{"existing"}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{"existing"}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab to Add Label input (Title -> Priority -> Status -> Labels -> Add Label input)
@@ -652,7 +652,7 @@ func TestSaveMsg_AddNewLabel(t *testing.T) {
 // Tests for title and description fields
 
 func TestNew_InitializesTitleField(t *testing.T) {
-	issue := testIssueWithDescription("test-123", "My Custom Title", "", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithDescription("test-123", "My Custom Title", "", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	view := stripZoneMarkers(m.View())
@@ -661,7 +661,7 @@ func TestNew_InitializesTitleField(t *testing.T) {
 }
 
 func TestNew_InitializesDescriptionField(t *testing.T) {
-	issue := testIssueWithDescription("test-123", "Title", "This is the description", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithDescription("test-123", "Title", "This is the description", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	view := m.View()
@@ -670,7 +670,7 @@ func TestNew_InitializesDescriptionField(t *testing.T) {
 }
 
 func TestSaveMsg_ContainsTitleValue(t *testing.T) {
-	issue := testIssueWithDescription("test-123", "Original Title", "", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithDescription("test-123", "Original Title", "", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab through all fields to Submit button
@@ -693,7 +693,7 @@ func TestSaveMsg_ContainsTitleValue(t *testing.T) {
 }
 
 func TestSaveMsg_ContainsDescriptionValue(t *testing.T) {
-	issue := testIssueWithDescription("test-123", "Title", "Original Description", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithDescription("test-123", "Title", "Original Description", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab through all fields to Submit button
@@ -716,7 +716,7 @@ func TestSaveMsg_ContainsDescriptionValue(t *testing.T) {
 }
 
 func TestView_FieldOrder(t *testing.T) {
-	issue := testIssueWithNotes("test-123", "My Title", "My Description", "My Notes", []string{"label1"}, beads.PriorityHigh, beads.StatusOpen)
+	issue := testIssueWithNotes("test-123", "My Title", "My Description", "My Notes", []string{"label1"}, task.PriorityHigh, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(80, 50)
 
@@ -748,7 +748,7 @@ func findIndex(s, substr string) int {
 }
 
 func TestView_ContainsTitleField(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	view := m.View()
 
@@ -756,7 +756,7 @@ func TestView_ContainsTitleField(t *testing.T) {
 }
 
 func TestView_ContainsDescriptionField(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	view := m.View()
 
@@ -767,7 +767,7 @@ func TestView_ContainsDescriptionField(t *testing.T) {
 // Tests for Notes field
 
 func TestNew_InitializesNotesField(t *testing.T) {
-	issue := testIssueWithNotes("test-123", "Title", "Description", "My notes here", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-123", "Title", "Description", "My notes here", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	view := m.View()
@@ -776,7 +776,7 @@ func TestNew_InitializesNotesField(t *testing.T) {
 }
 
 func TestView_ContainsNotesField(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	view := m.View()
 
@@ -785,7 +785,7 @@ func TestView_ContainsNotesField(t *testing.T) {
 }
 
 func TestSaveMsg_ContainsNotesValue(t *testing.T) {
-	issue := testIssueWithNotes("test-123", "Title", "Description", "Original Notes", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-123", "Title", "Description", "Original Notes", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab through all fields to Submit button
@@ -808,7 +808,7 @@ func TestSaveMsg_ContainsNotesValue(t *testing.T) {
 }
 
 func TestIssueeditor_SaveMsg_IncludesNotes(t *testing.T) {
-	issue := testIssueWithNotes("test-123", "Title", "Desc", "Test notes content", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-123", "Title", "Desc", "Test notes content", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	// Tab through all fields to Submit button
@@ -831,7 +831,7 @@ func TestIssueeditor_SaveMsg_IncludesNotes(t *testing.T) {
 
 func TestIssueeditor_NotesField_VimEnabled(t *testing.T) {
 	// VimEnabled starts in insert mode by default, so we can type directly
-	issue := testIssueWithNotes("test-123", "Title", "Desc", "", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-123", "Title", "Desc", "", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := NewWithVimMode(issue, true)
 
 	// Tab to Notes field (Title -> Priority -> Status -> Labels -> Add Label input -> Description -> Notes)
@@ -864,7 +864,7 @@ func TestIssueeditor_NotesField_VimEnabled(t *testing.T) {
 }
 
 func TestIssueEditor_TitleField_VimModeDisabled_EscapeCancels(t *testing.T) {
-	issue := testIssue("test-title-esc-off", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-title-esc-off", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := NewWithVimMode(issue, false).SetSize(120, 40)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -875,7 +875,7 @@ func TestIssueEditor_TitleField_VimModeDisabled_EscapeCancels(t *testing.T) {
 }
 
 func TestIssueEditor_TitleField_VimModeEnabled_EscapeStaysInModal(t *testing.T) {
-	issue := testIssue("test-title-esc-on", []string{}, beads.PriorityCritical, beads.StatusOpen)
+	issue := testIssue("test-title-esc-on", []string{}, task.PriorityCritical, task.StatusOpen)
 	m := NewWithVimMode(issue, true).SetSize(120, 40)
 
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -897,11 +897,11 @@ func TestIssueEditor_TitleField_VimModeEnabled_EscapeStaysInModal(t *testing.T) 
 	msg := cmd()
 	saveMsg, ok := msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg after Esc in vim mode, got %T", msg)
-	require.Equal(t, beads.PriorityHigh, saveMsg.Priority, "priority change proves modal stayed active after Esc")
+	require.Equal(t, task.PriorityHigh, saveMsg.Priority, "priority change proves modal stayed active after Esc")
 }
 
 func TestIssueeditor_EmptyNotes_DisplaysPlaceholder(t *testing.T) {
-	issue := testIssue("test-123", []string{}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssue("test-123", []string{}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 
 	view := m.View()
@@ -912,7 +912,7 @@ func TestIssueeditor_EmptyNotes_DisplaysPlaceholder(t *testing.T) {
 // Run with -update flag to update golden files: go test -update ./internal/ui/modals/issueeditor/...
 
 func TestIssueEditor_View_Golden(t *testing.T) {
-	issue := testIssue("test-123", []string{"bug", "feature"}, beads.PriorityHigh, beads.StatusOpen)
+	issue := testIssue("test-123", []string{"bug", "feature"}, task.PriorityHigh, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(80, 50) // Large enough to avoid scrolling
 	view := stripZoneMarkers(m.View())
@@ -921,7 +921,7 @@ func TestIssueEditor_View_Golden(t *testing.T) {
 }
 
 func TestIssueEditor_View_EmptyLabels_Golden(t *testing.T) {
-	issue := testIssue("test-456", []string{}, beads.PriorityMedium, beads.StatusInProgress)
+	issue := testIssue("test-456", []string{}, task.PriorityMedium, task.StatusInProgress)
 	m := New(issue)
 	m = m.SetSize(80, 50) // Large enough to avoid scrolling
 	view := stripZoneMarkers(m.View())
@@ -931,7 +931,7 @@ func TestIssueEditor_View_EmptyLabels_Golden(t *testing.T) {
 
 func TestIssueEditor_View_ManyLabels_Golden(t *testing.T) {
 	labels := []string{"bug", "feature", "ui", "backend", "api", "database"}
-	issue := testIssue("test-789", labels, beads.PriorityCritical, beads.StatusClosed)
+	issue := testIssue("test-789", labels, task.PriorityCritical, task.StatusClosed)
 	m := New(issue)
 	m = m.SetSize(80, 50) // Large enough to avoid scrolling
 	view := stripZoneMarkers(m.View())
@@ -952,7 +952,7 @@ func stripZoneMarkers(s string) string {
 
 func TestIssueEditor_TwoColumn_120x40_Golden(t *testing.T) {
 	// Two-column layout is enabled when width >= 100
-	issue := testIssueWithNotes("test-layout", "Multi-Column Issue", "This description appears in column 1", "Internal notes here", []string{"bug", "feature"}, beads.PriorityHigh, beads.StatusOpen)
+	issue := testIssueWithNotes("test-layout", "Multi-Column Issue", "This description appears in column 1", "Internal notes here", []string{"bug", "feature"}, task.PriorityHigh, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(120, 40) // Wide enough for two columns
 	view := stripZoneMarkers(m.View())
@@ -970,8 +970,8 @@ func TestIssueEditor_LongTitle_120x40_Golden(t *testing.T) {
 		descriptionSentinel,
 		"Internal notes for long title case",
 		[]string{"bug", "ui"},
-		beads.PriorityHigh,
-		beads.StatusOpen,
+		task.PriorityHigh,
+		task.StatusOpen,
 	)
 	m := New(issue)
 	m = m.SetSize(120, 40)
@@ -994,7 +994,7 @@ func TestIssueEditor_LongTitle_120x40_Golden(t *testing.T) {
 }
 
 func TestIssueEditor_TitleField_NextFlowViaEnterAndDownArrow(t *testing.T) {
-	issue := testIssue("test-title-nav", []string{"bug"}, beads.PriorityCritical, beads.StatusOpen)
+	issue := testIssue("test-title-nav", []string{"bug"}, task.PriorityCritical, task.StatusOpen)
 	m := New(issue).SetSize(120, 40)
 
 	// Enter from title should move to Priority (same flow as legacy text input).
@@ -1015,7 +1015,7 @@ func TestIssueEditor_TitleField_NextFlowViaEnterAndDownArrow(t *testing.T) {
 	msg := cmd()
 	saveMsg, ok := msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg, got %T", msg)
-	require.Equal(t, beads.PriorityMedium, saveMsg.Priority, "priority change proves Enter advanced focus off title field")
+	require.Equal(t, task.PriorityMedium, saveMsg.Priority, "priority change proves Enter advanced focus off title field")
 
 	// Down-arrow from title should also move to Priority.
 	m = New(issue).SetSize(120, 40)
@@ -1031,12 +1031,12 @@ func TestIssueEditor_TitleField_NextFlowViaEnterAndDownArrow(t *testing.T) {
 	msg = cmd()
 	saveMsg, ok = msg.(SaveMsg)
 	require.True(t, ok, "expected SaveMsg, got %T", msg)
-	require.Equal(t, beads.PriorityMedium, saveMsg.Priority, "priority change proves Down-arrow advanced focus off title field")
+	require.Equal(t, task.PriorityMedium, saveMsg.Priority, "priority change proves Down-arrow advanced focus off title field")
 }
 
 func TestIssueEditor_SingleColumn_80x40_Golden(t *testing.T) {
 	// Single-column fallback when width < 100
-	issue := testIssueWithNotes("test-narrow", "Narrow Issue", "Description in single column", "Notes in single column", []string{"bug"}, beads.PriorityMedium, beads.StatusInProgress)
+	issue := testIssueWithNotes("test-narrow", "Narrow Issue", "Description in single column", "Notes in single column", []string{"bug"}, task.PriorityMedium, task.StatusInProgress)
 	m := New(issue)
 	m = m.SetSize(80, 40) // Narrow: single column fallback
 	view := stripZoneMarkers(m.View())
@@ -1048,7 +1048,7 @@ func TestIssueEditor_SingleColumn_80x40_Golden(t *testing.T) {
 
 func TestTabOrder_TraversesFieldsInArrayOrder(t *testing.T) {
 	// Tab order should be: title -> priority -> status -> labels -> add-label-input -> description -> notes -> submit
-	issue := testIssueWithNotes("test-tab", "Tab Order Test", "Description", "Notes", []string{"label1"}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-tab", "Tab Order Test", "Description", "Notes", []string{"label1"}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(120, 40) // Two-column mode
 
@@ -1079,7 +1079,7 @@ func TestTabOrder_TraversesFieldsInArrayOrder(t *testing.T) {
 
 func TestShiftTabOrder_ReversesCorrectly(t *testing.T) {
 	// Shift-Tab from submit should go back through fields in reverse order
-	issue := testIssueWithNotes("test-shift-tab", "Shift-Tab Test", "Description", "Notes", []string{"label1"}, beads.PriorityMedium, beads.StatusOpen)
+	issue := testIssueWithNotes("test-shift-tab", "Shift-Tab Test", "Description", "Notes", []string{"label1"}, task.PriorityMedium, task.StatusOpen)
 	m := New(issue)
 	m = m.SetSize(120, 40) // Two-column mode
 
@@ -1117,7 +1117,7 @@ func TestShiftTabOrder_ReversesCorrectly(t *testing.T) {
 func TestTabOrder_ConsistentBetweenSingleAndTwoColumn(t *testing.T) {
 	// Tab order should be identical regardless of column layout mode
 	// Use labels to include the add-label input sub-focus in the tab cycle
-	issue := testIssueWithNotes("test-consistent", "Consistent Tab", "Desc", "Notes", []string{"label1"}, beads.PriorityLow, beads.StatusClosed)
+	issue := testIssueWithNotes("test-consistent", "Consistent Tab", "Desc", "Notes", []string{"label1"}, task.PriorityLow, task.StatusClosed)
 
 	// Test narrow width (single column)
 	mNarrow := New(issue)

@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	"github.com/zjrosen/perles/internal/orchestration/metrics"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/chatrender"
 	"github.com/zjrosen/perles/internal/ui/tree"
 )
@@ -764,7 +764,7 @@ func TestModel_SaveEpicTreeState_SavesDirectionModeSelection(t *testing.T) {
 	m = m.SetSize(100, 40).(Model)
 
 	// Create a tree with specific state (DirectionDown shows children)
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"issue-1": {ID: "issue-1", TitleText: "Root Issue", Children: []string{"issue-2"}},
 		"issue-2": {ID: "issue-2", TitleText: "Child Issue", ParentID: "issue-1"},
 	}
@@ -812,7 +812,7 @@ func TestModel_TreeStateRestoredOnReturn(t *testing.T) {
 	m.selectedIndex = 0
 
 	// Create a tree with specific state for wf-1
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"epic-1":  {ID: "epic-1", TitleText: "Epic 1", Children: []string{"issue-1"}},
 		"issue-1": {ID: "issue-1", TitleText: "Issue 1", ParentID: "epic-1"},
 	}
@@ -835,7 +835,7 @@ func TestModel_TreeStateRestoredOnReturn(t *testing.T) {
 	m.handleWorkflowSelectionChange(1)
 
 	// Create different tree state for wf-2
-	issueMap2 := map[string]*beads.Issue{
+	issueMap2 := map[string]*task.Issue{
 		"epic-2":  {ID: "epic-2", TitleText: "Epic 2", Children: []string{"issue-2"}},
 		"issue-2": {ID: "issue-2", TitleText: "Issue 2", ParentID: "epic-2"},
 	}

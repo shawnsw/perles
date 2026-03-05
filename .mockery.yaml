@@ -2,19 +2,12 @@ with-expecter: true
 dir: internal/mocks
 outpkg: mocks
 packages:
-  github.com/zjrosen/perles/internal/mode:
+  github.com/zjrosen/perles/internal/task:
     interfaces:
-      BeadsClient:
-  github.com/zjrosen/perles/internal/beads/application:
-    interfaces:
-      VersionReader:
-      CommentReader:
-      IssueReader:
-      IssueWriter:
-      IssueExecutor:
-  github.com/zjrosen/perles/internal/bql:
-    interfaces:
-      BQLExecutor:
+      Backend:
+      TaskExecutor:
+      QueryExecutor:
+      QueryHelpers:
   github.com/zjrosen/perles/internal/cachemanager:
     interfaces:
       CacheManager:

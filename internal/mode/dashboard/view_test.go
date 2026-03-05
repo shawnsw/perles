@@ -7,9 +7,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/orchestration/events"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/styles"
 )
@@ -391,11 +391,11 @@ func TestView_IssueEditorOverlay_ReturnsModalWhenNonNil(t *testing.T) {
 	m.height = 40
 
 	// Create a test issue and editor
-	testIssue := beads.Issue{
+	testIssue := task.Issue{
 		ID:        "issue-123",
 		TitleText: "Test Issue",
-		Status:    beads.StatusOpen,
-		Priority:  beads.PriorityMedium,
+		Status:    task.StatusOpen,
+		Priority:  task.PriorityMedium,
 	}
 	editor := issueeditor.New(testIssue).SetSize(100, 40)
 	m.issueEditor = &editor

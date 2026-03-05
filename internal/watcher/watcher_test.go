@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/pubsub"
 	"github.com/zjrosen/perles/internal/watcher"
 )
@@ -75,8 +74,9 @@ func TestWatcher_IgnoresIrrelevantFiles(t *testing.T) {
 	require.NoError(t, err, "failed to create other file")
 
 	w, err := watcher.New(watcher.Config{
-		DBPath:      dbPath,
-		DebounceDur: 50 * time.Millisecond,
+		DBPath:        dbPath,
+		DebounceDur:   50 * time.Millisecond,
+		RelevantFiles: []string{"beads.db", "beads.db-wal"},
 	})
 	require.NoError(t, err, "failed to create watcher")
 	defer func() { _ = w.Stop() }()
@@ -168,22 +168,28 @@ func TestWatcher_WatchesWALFile(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig(t *testing.T) {
-	dbPath := "/test/beads.db"
-	cfg := watcher.DefaultConfig(dbPath, appbeads.DialectSQLite)
+func TestConfig_SQLiteDefaults(t *testing.T) {
+	cfg := watcher.Config{
+		DBPath:        "/test/beads.db",
+		DebounceDur:   100 * time.Millisecond,
+		RelevantFiles: []string{"beads.db", "beads.db-wal"},
+	}
 
-	require.Equal(t, dbPath, cfg.DBPath)
+	require.Equal(t, "/test/beads.db", cfg.DBPath)
 	require.Equal(t, 100*time.Millisecond, cfg.DebounceDur)
-	require.Equal(t, appbeads.DialectSQLite, cfg.Dialect)
+	require.Equal(t, []string{"beads.db", "beads.db-wal"}, cfg.RelevantFiles)
 }
 
-func TestDefaultConfig_Dolt(t *testing.T) {
-	dbPath := "/test/.beads/dolt"
-	cfg := watcher.DefaultConfig(dbPath, appbeads.DialectMySQL)
+func TestConfig_DoltDefaults(t *testing.T) {
+	cfg := watcher.Config{
+		DBPath:        "/test/.beads/dolt",
+		DebounceDur:   500 * time.Millisecond,
+		RelevantFiles: []string{"last-touched"},
+	}
 
-	require.Equal(t, dbPath, cfg.DBPath)
+	require.Equal(t, "/test/.beads/dolt", cfg.DBPath)
 	require.Equal(t, 500*time.Millisecond, cfg.DebounceDur, "Dolt debounce should be longer to coalesce rapid bd commands")
-	require.Equal(t, appbeads.DialectMySQL, cfg.Dialect)
+	require.Equal(t, []string{"last-touched"}, cfg.RelevantFiles)
 }
 
 func TestWatcher_BrokerAccessor(t *testing.T) {
@@ -516,9 +522,9 @@ func TestDolt_WatchesLastTouchedFile(t *testing.T) {
 	require.NoError(t, err, "failed to create last-touched file")
 
 	w, err := watcher.New(watcher.Config{
-		DBPath:      dbPath,
-		DebounceDur: 50 * time.Millisecond,
-		Dialect:     appbeads.DialectMySQL,
+		DBPath:        dbPath,
+		DebounceDur:   50 * time.Millisecond,
+		RelevantFiles: []string{"last-touched"},
 	})
 	require.NoError(t, err, "failed to create watcher")
 	defer func() { _ = w.Stop() }()
@@ -559,9 +565,9 @@ func TestDolt_IgnoresIrrelevantFiles(t *testing.T) {
 	require.NoError(t, err, "failed to create server log file")
 
 	w, err := watcher.New(watcher.Config{
-		DBPath:      dbPath,
-		DebounceDur: 50 * time.Millisecond,
-		Dialect:     appbeads.DialectMySQL,
+		DBPath:        dbPath,
+		DebounceDur:   50 * time.Millisecond,
+		RelevantFiles: []string{"last-touched"},
 	})
 	require.NoError(t, err, "failed to create watcher")
 	defer func() { _ = w.Stop() }()
@@ -602,9 +608,9 @@ func TestDolt_IgnoresSQLiteFiles(t *testing.T) {
 	require.NoError(t, err, "failed to create beads.db file")
 
 	w, err := watcher.New(watcher.Config{
-		DBPath:      dbPath,
-		DebounceDur: 50 * time.Millisecond,
-		Dialect:     appbeads.DialectMySQL,
+		DBPath:        dbPath,
+		DebounceDur:   50 * time.Millisecond,
+		RelevantFiles: []string{"last-touched"},
 	})
 	require.NoError(t, err, "failed to create watcher")
 	defer func() { _ = w.Stop() }()
@@ -616,7 +622,7 @@ func TestDolt_IgnoresSQLiteFiles(t *testing.T) {
 	err = w.Start()
 	require.NoError(t, err, "failed to start watcher")
 
-	// Write to beads.db should NOT trigger for Dolt dialect
+	// Write to beads.db should NOT trigger for Dolt watcher
 	err = os.WriteFile(sqlitePath, []byte("sqlite modified"), 0644)
 	require.NoError(t, err, "failed to write beads.db file")
 
@@ -639,9 +645,9 @@ func TestDolt_DebounceLastTouchedWrites(t *testing.T) {
 	require.NoError(t, err, "failed to create last-touched file")
 
 	w, err := watcher.New(watcher.Config{
-		DBPath:      dbPath,
-		DebounceDur: 150 * time.Millisecond,
-		Dialect:     appbeads.DialectMySQL,
+		DBPath:        dbPath,
+		DebounceDur:   150 * time.Millisecond,
+		RelevantFiles: []string{"last-touched"},
 	})
 	require.NoError(t, err, "failed to create watcher")
 	defer func() { _ = w.Stop() }()

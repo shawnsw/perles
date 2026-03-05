@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"strings"
@@ -13,9 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beadsapp "github.com/zjrosen/perles/internal/beads/application"
-	beadsdomain "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/flags"
 	"github.com/zjrosen/perles/internal/mocks"
@@ -26,6 +24,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/client"
 	v2 "github.com/zjrosen/perles/internal/orchestration/v2"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/chatpanel"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
@@ -36,6 +35,14 @@ func TestMain(m *testing.M) {
 	zone.NewGlobal()
 	os.Exit(m.Run())
 }
+
+// noopBackend implements task.Backend for tests that construct Models directly.
+type noopBackend struct{}
+
+func (b *noopBackend) Services() task.BackendServices      { return task.BackendServices{} }
+func (b *noopBackend) CheckCompatibility() error           { return nil }
+func (b *noopBackend) FlushCaches(_ context.Context) error { return nil }
+func (b *noopBackend) Close() error                        { return nil }
 
 // newTestChatInfrastructure creates a v2.SimpleInfrastructure with mock provider for testing.
 func newTestChatInfrastructure(t *testing.T) *v2.SimpleInfrastructure {
@@ -82,11 +89,8 @@ func createTestModel(t *testing.T) Model {
 		Clipboard: clipboard,
 	}
 
-	// Create cache mocks that accept Flush calls during mode transitions.
-	bqlCacheMock := mocks.NewMockCacheManager[string, []beadsdomain.Issue](t)
-	bqlCacheMock.EXPECT().Flush(mock.Anything).Return(nil).Maybe()
-	depGraphCacheMock := mocks.NewMockCacheManager[string, *bql.DependencyGraph](t)
-	depGraphCacheMock.EXPECT().Flush(mock.Anything).Return(nil).Maybe()
+	// Create a no-op backend for cache flushing during mode transitions.
+	testBackend := &noopBackend{}
 
 	// Create chat panel with config from services (same pattern as NewWithConfig)
 	chatPanelCfg := chatpanel.Config{
@@ -96,15 +100,14 @@ func createTestModel(t *testing.T) Model {
 	}
 
 	return Model{
-		currentMode:   mode.ModeKanban,
-		kanban:        kanban.New(services),
-		search:        search.New(services),
-		services:      services,
-		bqlCache:      bqlCacheMock,
-		depGraphCache: depGraphCacheMock,
-		chatPanel:     chatpanel.New(chatPanelCfg),
-		width:         100,
-		height:        40,
+		currentMode: mode.ModeKanban,
+		kanban:      kanban.New(services),
+		search:      search.New(services),
+		services:    services,
+		backend:     testBackend,
+		chatPanel:   chatpanel.New(chatPanelCfg),
+		width:       100,
+		height:      40,
 	}
 }
 
@@ -138,7 +141,7 @@ func getWorkflowCreatorTemplatesConfig(t *testing.T, creator *appreg.WorkflowCre
 	return *(*config.TemplatesConfig)(unsafe.Pointer(field.UnsafeAddr()))
 }
 
-func setWorkflowCreatorExecutor(t *testing.T, creator *appreg.WorkflowCreator, executor beadsapp.IssueExecutor) {
+func setWorkflowCreatorExecutor(t *testing.T, creator *appreg.WorkflowCreator, executor task.TaskExecutor) {
 	t.Helper()
 
 	field := reflect.ValueOf(creator).Elem().FieldByName("executor")
@@ -580,17 +583,12 @@ func TestApp_WorkflowCreatorReceivesConfig(t *testing.T) {
 	registryService, err := appreg.NewRegistryService(createWorkflowCreatorConfigFS("Doc: {{.Config.document_path}}"), nil, "")
 	require.NoError(t, err)
 
-	model, err := NewWithConfig(
-		nil,
-		cfg,
-		nil,
-		nil,
-		"",
-		"",
-		t.TempDir(),
-		false,
-		registryService,
-	)
+	model, err := NewWithConfig(AppConfig{
+		Cfg:             cfg,
+		Backend:         &noopBackend{},
+		WorkDir:         t.TempDir(),
+		RegistryService: registryService,
+	})
 	require.NoError(t, err)
 
 	got := getWorkflowCreatorTemplatesConfig(t, model.workflowCreator)
@@ -604,25 +602,21 @@ func TestApp_EndToEnd_CustomPath(t *testing.T) {
 	registryService, err := appreg.NewRegistryService(createWorkflowCreatorConfigFS("Doc: {{.Config.document_path}}/plan.md"), nil, "")
 	require.NoError(t, err)
 
-	model, err := NewWithConfig(
-		nil,
-		cfg,
-		nil,
-		nil,
-		"",
-		"",
-		t.TempDir(),
-		false,
-		registryService,
-	)
+	model, err := NewWithConfig(AppConfig{
+		Cfg:             cfg,
+		Backend:         &noopBackend{},
+		WorkDir:         t.TempDir(),
+		RegistryService: registryService,
+	})
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().GetComments(mock.Anything).Return(nil, nil).Maybe()
 	mockExecutor.EXPECT().CreateEpic(
 		"Config Workflow: Test Feature",
 		mock.AnythingOfType("string"),
 		[]string{"feature:test-feature", "workflow:config-workflow"},
-	).Return(beadsdomain.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
+	).Return(task.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
 
 	mockExecutor.EXPECT().CreateTask(
 		"Task",
@@ -632,7 +626,7 @@ func TestApp_EndToEnd_CustomPath(t *testing.T) {
 		"test-epic",
 		mock.AnythingOfType("string"),
 		[]string{"spec:plan"},
-	).Return(beadsdomain.CreateResult{ID: "task-1", Title: "Task"}, nil)
+	).Return(task.CreateResult{ID: "task-1", Title: "Task"}, nil)
 
 	setWorkflowCreatorExecutor(t, model.workflowCreator, mockExecutor)
 
@@ -647,25 +641,21 @@ func TestApp_EndToEnd_DefaultPath(t *testing.T) {
 	registryService, err := appreg.NewRegistryService(createWorkflowCreatorConfigFS("Doc: {{.Config.document_path}}/plan.md"), nil, "")
 	require.NoError(t, err)
 
-	model, err := NewWithConfig(
-		nil,
-		cfg,
-		nil,
-		nil,
-		"",
-		"",
-		t.TempDir(),
-		false,
-		registryService,
-	)
+	model, err := NewWithConfig(AppConfig{
+		Cfg:             cfg,
+		Backend:         &noopBackend{},
+		WorkDir:         t.TempDir(),
+		RegistryService: registryService,
+	})
 	require.NoError(t, err)
 
-	mockExecutor := mocks.NewMockIssueExecutor(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().GetComments(mock.Anything).Return(nil, nil).Maybe()
 	mockExecutor.EXPECT().CreateEpic(
 		"Config Workflow: Test Feature",
 		mock.AnythingOfType("string"),
 		[]string{"feature:test-feature", "workflow:config-workflow"},
-	).Return(beadsdomain.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
+	).Return(task.CreateResult{ID: "test-epic", Title: "Config Workflow: Test Feature"}, nil)
 
 	mockExecutor.EXPECT().CreateTask(
 		"Task",
@@ -675,7 +665,7 @@ func TestApp_EndToEnd_DefaultPath(t *testing.T) {
 		"test-epic",
 		mock.AnythingOfType("string"),
 		[]string{"spec:plan"},
-	).Return(beadsdomain.CreateResult{ID: "task-1", Title: "Task"}, nil)
+	).Return(task.CreateResult{ID: "task-1", Title: "Task"}, nil)
 
 	setWorkflowCreatorExecutor(t, model.workflowCreator, mockExecutor)
 
@@ -2292,17 +2282,11 @@ func TestApp_InitializesDatabase(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Flags = map[string]bool{flags.FlagSessionPersistence: true}
 
-	model, err := NewWithConfig(
-		nil, // client - not needed for database tests
-		cfg,
-		nil, // bqlCache
-		nil, // depGraphCache
-		"",  // dbPath (beads db path)
-		"",  // configPath
-		"/tmp",
-		false, // debugMode
-		nil,   // registryService
-	)
+	model, err := NewWithConfig(AppConfig{
+		Cfg:     cfg,
+		Backend: &noopBackend{},
+		WorkDir: "/tmp",
+	})
 	require.NoError(t, err, "NewWithConfig should not error")
 	require.NotNil(t, model.db, "database should be initialized")
 	require.NotNil(t, model.services.SessionRepository, "SessionRepository should be available")
@@ -2322,17 +2306,11 @@ func TestApp_Shutdown_ClosesDatabase(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Flags = map[string]bool{flags.FlagSessionPersistence: true}
 
-	model, err := NewWithConfig(
-		nil, // client
-		cfg,
-		nil, // bqlCache
-		nil, // depGraphCache
-		"",  // dbPath
-		"",  // configPath
-		"/tmp",
-		false, // debugMode
-		nil,   // registryService
-	)
+	model, err := NewWithConfig(AppConfig{
+		Cfg:     cfg,
+		Backend: &noopBackend{},
+		WorkDir: "/tmp",
+	})
 	require.NoError(t, err)
 	require.NotNil(t, model.db, "database should be initialized")
 

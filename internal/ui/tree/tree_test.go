@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/stretchr/testify/require"
@@ -25,14 +25,14 @@ func newTestClock(t *testing.T) shared.Clock {
 	return clock
 }
 
-func makeTestIssueMap() map[string]*beads.Issue {
-	return map[string]*beads.Issue{
+func makeTestIssueMap() map[string]*task.Issue {
+	return map[string]*task.Issue{
 		"epic-1": {
 			ID:           "epic-1",
 			TitleText:    "Epic One",
-			Status:       beads.StatusOpen,
-			Type:         beads.TypeEpic,
-			Priority:     beads.PriorityHigh,
+			Status:       task.StatusOpen,
+			Type:         task.TypeEpic,
+			Priority:     task.PriorityHigh,
 			Children:     []string{"task-1", "task-2"},
 			CreatedAt:    testCreatedAt,
 			CommentCount: 3,
@@ -40,9 +40,9 @@ func makeTestIssueMap() map[string]*beads.Issue {
 		"task-1": {
 			ID:           "task-1",
 			TitleText:    "Task One",
-			Status:       beads.StatusClosed,
-			Type:         beads.TypeTask,
-			Priority:     beads.PriorityCritical,
+			Status:       task.StatusClosed,
+			Type:         task.TypeTask,
+			Priority:     task.PriorityCritical,
 			ParentID:     "epic-1",
 			CreatedAt:    testCreatedAt,
 			CommentCount: 0,
@@ -50,9 +50,9 @@ func makeTestIssueMap() map[string]*beads.Issue {
 		"task-2": {
 			ID:           "task-2",
 			TitleText:    "Task Two",
-			Status:       beads.StatusOpen,
-			Type:         beads.TypeTask,
-			Priority:     beads.PriorityMedium,
+			Status:       task.StatusOpen,
+			Type:         task.TypeTask,
+			Priority:     task.PriorityMedium,
 			ParentID:     "epic-1",
 			Children:     []string{"subtask-1"},
 			CreatedAt:    testCreatedAt,
@@ -61,9 +61,9 @@ func makeTestIssueMap() map[string]*beads.Issue {
 		"subtask-1": {
 			ID:           "subtask-1",
 			TitleText:    "Subtask One",
-			Status:       beads.StatusInProgress,
-			Type:         beads.TypeTask,
-			Priority:     beads.PriorityMedium,
+			Status:       task.StatusInProgress,
+			Type:         task.TypeTask,
+			Priority:     task.PriorityMedium,
 			ParentID:     "task-2",
 			CreatedAt:    testCreatedAt,
 			CommentCount: 5,
@@ -237,11 +237,11 @@ func TestGoBack_EmptyStack_WithParentInMap(t *testing.T) {
 
 func TestGoBack_EmptyStack_ParentNotInMap(t *testing.T) {
 	// Create a minimal issue map without the parent
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"task-1": {
 			ID:        "task-1",
 			TitleText: "Task One",
-			Status:    beads.StatusOpen,
+			Status:    task.StatusOpen,
 			ParentID:  "missing-parent",
 			CreatedAt: testCreatedAt,
 		},
@@ -378,13 +378,13 @@ func TestView_Golden_LeafNode(t *testing.T) {
 // TestView_Golden_NarrowWidth tests tree view with narrow width and long title.
 // At width 60, there's enough room for metadata.
 func TestView_Golden_NarrowWidth(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"long-1": {
 			ID:           "long-1",
 			TitleText:    "This is a very long title that should definitely be truncated to fit",
-			Status:       beads.StatusOpen,
-			Type:         beads.TypeEpic,
-			Priority:     beads.PriorityHigh,
+			Status:       task.StatusOpen,
+			Type:         task.TypeEpic,
+			Priority:     task.PriorityHigh,
 			CreatedAt:    testCreatedAt,
 			CommentCount: 3,
 		},
@@ -399,13 +399,13 @@ func TestView_Golden_NarrowWidth(t *testing.T) {
 // TestView_Golden_VeryNarrowWidth tests tree view with very narrow width.
 // Metadata should be hidden when there's not enough room.
 func TestView_Golden_VeryNarrowWidth(t *testing.T) {
-	issueMap := map[string]*beads.Issue{
+	issueMap := map[string]*task.Issue{
 		"long-1": {
 			ID:           "long-1",
 			TitleText:    "This is a very long title that should definitely be truncated to fit",
-			Status:       beads.StatusOpen,
-			Type:         beads.TypeEpic,
-			Priority:     beads.PriorityHigh,
+			Status:       task.StatusOpen,
+			Type:         task.TypeEpic,
+			Priority:     task.PriorityHigh,
 			CreatedAt:    testCreatedAt,
 			CommentCount: 3,
 		},

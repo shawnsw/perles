@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
@@ -30,17 +30,17 @@ func createTestModel(t *testing.T) Model {
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
 	services := mode.Services{
-		Client:    mockClient,
-		Executor:  mockExecutor,
-		Config:    &cfg,
-		Clipboard: clipboard,
+		TaskExecutor:  mockTaskExec,
+		QueryExecutor: mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
 	}
 
 	m := New(services)
@@ -52,10 +52,10 @@ func createTestModel(t *testing.T) Model {
 // createTestModelWithResults creates a Model with some test results loaded.
 func createTestModelWithResults(t *testing.T) Model {
 	m := createTestModel(t)
-	issues := []beads.Issue{
-		{ID: "test-1", TitleText: "First Issue", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeTask},
-		{ID: "test-2", TitleText: "Second Issue", Priority: 2, Status: beads.StatusInProgress, Type: beads.TypeBug},
-		{ID: "test-3", TitleText: "Third Issue", Priority: 0, Status: beads.StatusOpen, Type: beads.TypeFeature},
+	issues := []task.Issue{
+		{ID: "test-1", TitleText: "First Issue", Priority: 1, Status: task.StatusOpen, Type: task.TypeTask},
+		{ID: "test-2", TitleText: "Second Issue", Priority: 2, Status: task.StatusInProgress, Type: task.TypeBug},
+		{ID: "test-3", TitleText: "Third Issue", Priority: 0, Status: task.StatusOpen, Type: task.TypeFeature},
 	}
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
 	return m
@@ -93,9 +93,9 @@ func TestSearch_SetSize_ZeroGuard(t *testing.T) {
 
 func TestSearch_HandleSearchResults_Success(t *testing.T) {
 	m := createTestModel(t)
-	issues := []beads.Issue{
-		{ID: "test-1", TitleText: "First", Priority: 1, Status: beads.StatusOpen},
-		{ID: "test-2", TitleText: "Second", Priority: 2, Status: beads.StatusClosed},
+	issues := []task.Issue{
+		{ID: "test-1", TitleText: "First", Priority: 1, Status: task.StatusOpen},
+		{ID: "test-2", TitleText: "Second", Priority: 2, Status: task.StatusClosed},
 	}
 
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
@@ -109,7 +109,7 @@ func TestSearch_HandleSearchResults_Success(t *testing.T) {
 func TestSearch_HandleSearchResults_Empty(t *testing.T) {
 	m := createTestModel(t)
 
-	m, _ = m.handleSearchResults(searchResultsMsg{issues: []beads.Issue{}, err: nil})
+	m, _ = m.handleSearchResults(searchResultsMsg{issues: []task.Issue{}, err: nil})
 
 	require.Nil(t, m.searchErr, "expected no error")
 	require.Empty(t, m.results, "expected empty results")
@@ -295,17 +295,17 @@ func TestSearch_HelpOverlay_ShowsUserActions(t *testing.T) {
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
 	services := mode.Services{
-		Client:    mockClient,
-		Executor:  mockExecutor,
-		Config:    &cfg,
-		Clipboard: clipboard,
+		TaskExecutor:  mockTaskExec,
+		QueryExecutor: mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
 	}
 
 	m := New(services)
@@ -347,12 +347,12 @@ func TestSearch_IssueSaved_Success_PatchesResults(t *testing.T) {
 	newTitle := "Updated Title"
 	newDescription := "Updated Description"
 	newNotes := "Updated Notes"
-	newPriority := beads.PriorityCritical
-	newStatus := beads.StatusClosed
+	newPriority := task.PriorityCritical
+	newStatus := task.StatusClosed
 	newLabels := []string{"done"}
 	msg := issueSavedMsg{
 		issueID: "test-1",
-		opts: beads.UpdateIssueOptions{
+		opts: task.UpdateOptions{
 			Title:       &newTitle,
 			Description: &newDescription,
 			Notes:       &newNotes,
@@ -367,8 +367,8 @@ func TestSearch_IssueSaved_Success_PatchesResults(t *testing.T) {
 	require.Equal(t, "Updated Title", m.results[0].TitleText, "expected title patched in results")
 	require.Equal(t, "Updated Description", m.results[0].DescriptionText, "expected description patched in results")
 	require.Equal(t, "Updated Notes", m.results[0].Notes, "expected notes patched in results")
-	require.Equal(t, beads.PriorityCritical, m.results[0].Priority, "expected priority patched in results")
-	require.Equal(t, beads.StatusClosed, m.results[0].Status, "expected status patched in results")
+	require.Equal(t, task.PriorityCritical, m.results[0].Priority, "expected priority patched in results")
+	require.Equal(t, task.StatusClosed, m.results[0].Status, "expected status patched in results")
 	require.Equal(t, []string{"done"}, m.results[0].Labels, "expected labels patched in results")
 
 	// Verify toast message
@@ -386,15 +386,15 @@ func TestSearch_IssueSaved_Success_UnchangedFieldsNotModified(t *testing.T) {
 	m.results[0].TitleText = "Original Title"
 	m.results[0].DescriptionText = "Original Description"
 	m.results[0].Notes = "Original Notes"
-	m.results[0].Priority = beads.PriorityLow
-	m.results[0].Status = beads.StatusOpen
+	m.results[0].Priority = task.PriorityLow
+	m.results[0].Status = task.StatusOpen
 	m.results[0].Labels = []string{"original"}
 
 	// Only update title — all other fields should remain unchanged
 	newTitle := "Updated Title"
 	msg := issueSavedMsg{
 		issueID: "test-1",
-		opts: beads.UpdateIssueOptions{
+		opts: task.UpdateOptions{
 			Title: &newTitle,
 		},
 	}
@@ -403,8 +403,8 @@ func TestSearch_IssueSaved_Success_UnchangedFieldsNotModified(t *testing.T) {
 	require.Equal(t, "Updated Title", m.results[0].TitleText, "title should be updated")
 	require.Equal(t, "Original Description", m.results[0].DescriptionText, "description should be unchanged")
 	require.Equal(t, "Original Notes", m.results[0].Notes, "notes should be unchanged")
-	require.Equal(t, beads.PriorityLow, m.results[0].Priority, "priority should be unchanged")
-	require.Equal(t, beads.StatusOpen, m.results[0].Status, "status should be unchanged")
+	require.Equal(t, task.PriorityLow, m.results[0].Priority, "priority should be unchanged")
+	require.Equal(t, task.StatusOpen, m.results[0].Status, "status should be unchanged")
 	require.Equal(t, []string{"original"}, m.results[0].Labels, "labels should be unchanged")
 }
 
@@ -432,7 +432,7 @@ func TestSearch_IssueSaved_IssueNotInResults_NoPanic(t *testing.T) {
 	newTitle := "Updated Title"
 	msg := issueSavedMsg{
 		issueID: "nonexistent-id",
-		opts: beads.UpdateIssueOptions{
+		opts: task.UpdateOptions{
 			Title: &newTitle,
 		},
 	}
@@ -474,7 +474,7 @@ func TestSearch_View_NotPanics(t *testing.T) {
 }
 
 func TestSearch_IssueItem_FilterValue(t *testing.T) {
-	issue := beads.Issue{ID: "test-1", TitleText: "My Test Issue"}
+	issue := task.Issue{ID: "test-1", TitleText: "My Test Issue"}
 	item := issueItem{issue: issue}
 
 	require.Equal(t, "My Test Issue", item.FilterValue())
@@ -672,8 +672,8 @@ func TestSearch_YankKey_FocusDetails_UsesDetailsIssueID(t *testing.T) {
 	require.Equal(t, "test-1", m.results[m.selectedIdx].ID, "precondition: results selection is test-1")
 
 	// Create details view showing a DIFFERENT issue (test-999)
-	differentIssue := beads.Issue{ID: "test-999", TitleText: "Different Issue"}
-	m.details = details.New(differentIssue, m.services.Executor, m.services.Client).SetSize(50, 30)
+	differentIssue := task.Issue{ID: "test-999", TitleText: "Different Issue"}
+	m.details = details.New(differentIssue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 30)
 	m.hasDetail = true
 	m.focus = FocusDetails
 
@@ -703,8 +703,8 @@ func TestSearch_YankKey_FocusResults_UsesResultsIssueID(t *testing.T) {
 	require.Equal(t, "test-1", m.results[m.selectedIdx].ID, "precondition: results selection is test-1")
 
 	// Create details view showing a DIFFERENT issue
-	differentIssue := beads.Issue{ID: "test-999", TitleText: "Different Issue"}
-	m.details = details.New(differentIssue, m.services.Executor, m.services.Client).SetSize(50, 30)
+	differentIssue := task.Issue{ID: "test-999", TitleText: "Different Issue"}
+	m.details = details.New(differentIssue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 30)
 	m.hasDetail = true
 	m.focus = FocusResults // Focus on results, not details
 
@@ -1199,7 +1199,7 @@ func TestSearch_EditKey_FocusDetails_DelegatesToDetails(t *testing.T) {
 	m := createTestModelWithResults(t)
 	m.focus = FocusDetails
 	// Ensure details has an issue set
-	m.details = details.New(m.results[0], m.services.Executor, m.services.Client).SetSize(50, 30)
+	m.details = details.New(m.results[0], m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 30)
 	m.hasDetail = true
 
 	// Press 'ctrl+e' while focused on details - should delegate to details component
@@ -1268,7 +1268,7 @@ func TestSearch_DeleteKey_FocusDetails_DelegatesToDetails(t *testing.T) {
 	m := createTestModelWithResults(t)
 	m.focus = FocusDetails
 	// Ensure details has an issue set
-	m.details = details.New(m.results[0], m.services.Executor, m.services.Client).SetSize(50, 30)
+	m.details = details.New(m.results[0], m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 30)
 	m.hasDetail = true
 
 	// Press 'ctrl+d' while focused on details - should delegate to details component
@@ -1370,8 +1370,8 @@ func TestSearch_IssueEditor_SaveMsg_ReturnsToViewSearch(t *testing.T) {
 	// Process SaveMsg
 	msg := issueeditor.SaveMsg{
 		IssueID:  "test-1",
-		Priority: beads.PriorityHigh,
-		Status:   beads.StatusInProgress,
+		Priority: task.PriorityHigh,
+		Status:   task.StatusInProgress,
 		Labels:   []string{"updated"},
 	}
 	m, cmd := m.Update(msg)
@@ -1389,15 +1389,15 @@ func TestSearch_IssueEditor_SaveMsg_DispatchesSaveIssueCmd(t *testing.T) {
 	m.selectedIssue = &issue
 
 	// Set up mock executor
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.AnythingOfType("domain.UpdateIssueOptions")).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.AnythingOfType("task.UpdateOptions")).Return(nil)
+	m.services.TaskExecutor = mockExecutor
 
 	// Process SaveMsg with changed fields
 	msg := issueeditor.SaveMsg{
 		IssueID:  "test-1",
-		Priority: beads.PriorityCritical,
-		Status:   beads.StatusClosed,
+		Priority: task.PriorityCritical,
+		Status:   task.StatusClosed,
 		Labels:   []string{"done"},
 	}
 	m, cmd := m.Update(msg)
@@ -1431,10 +1431,10 @@ func TestSearch_IssueEditor_ReceivesCorrectInitialValuesFromOpenEditMenuMsg(t *t
 	m.focus = FocusDetails
 
 	// Set up issue with specific values
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:       "test-custom",
-		Priority: beads.PriorityLow,
-		Status:   beads.StatusInProgress,
+		Priority: task.PriorityLow,
+		Status:   task.StatusInProgress,
 		Labels:   []string{"alpha", "beta", "gamma"},
 	}
 	m.results[0] = *issue
@@ -1487,11 +1487,11 @@ func TestSearch_IssueEditor_SaveMsg_UpdatesTitleWhenChanged(t *testing.T) {
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor for consolidated UpdateIssue
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Title != nil && *opts.Title == "New Title"
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Open editor (which sets selectedIssue)
 	issue := m.results[0]
@@ -1527,11 +1527,11 @@ func TestSearch_IssueEditor_SaveMsg_SkipsTitleUpdateWhenUnchanged(t *testing.T) 
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor - UpdateIssue should be called but Title should be nil in opts
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Title == nil // Title should NOT be included when unchanged
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Open editor (which sets selectedIssue)
 	issue := m.results[0]
@@ -1562,11 +1562,11 @@ func TestSearch_IssueEditor_SaveMsg_UpdatesDescriptionWhenChanged(t *testing.T) 
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor for consolidated UpdateIssue
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Description != nil && *opts.Description == "New Description"
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Open editor (which sets selectedIssue)
 	issue := m.results[0]
@@ -1602,11 +1602,11 @@ func TestSearch_IssueEditor_SaveMsg_SkipsDescriptionUpdateWhenUnchanged(t *testi
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor - UpdateIssue should be called but Description should be nil in opts
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Description == nil // Description should NOT be included when unchanged
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Open editor (which sets selectedIssue)
 	issue := m.results[0]
@@ -1637,9 +1637,9 @@ func TestSearch_IssueEditor_SaveMsg_ErrorHandlingShowsToast(t *testing.T) {
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor that returns an error
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.AnythingOfType("domain.UpdateIssueOptions")).Return(errors.New("database error"))
-	m.services.BeadsExecutor = mockExecutor
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.AnythingOfType("task.UpdateOptions")).Return(errors.New("database error"))
+	m.services.TaskExecutor = mockExecutor
 
 	// Open editor (which sets selectedIssue)
 	issue := m.results[0]
@@ -1707,13 +1707,13 @@ func TestSearch_MouseScrollForwardsToDetails(t *testing.T) {
 	m.focus = FocusDetails
 
 	// Set up details panel with an issue that has scrollable content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-scroll",
 		TitleText: "Scrollable Issue",
 		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n" +
 			"Line 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 
 	// Verify preconditions
@@ -1742,13 +1742,13 @@ func TestSearch_MouseScrollWheelUp_ForwardsToDetails(t *testing.T) {
 	m.focus = FocusDetails
 
 	// Set up details panel with scrollable content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-scroll-up",
 		TitleText: "Scrollable Issue",
 		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n" +
 			"Line 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 
 	// First scroll down to have somewhere to scroll up from
@@ -1770,13 +1770,13 @@ func TestSearch_MouseScrollWorksWhenFocusedOnResults(t *testing.T) {
 	m.focus = FocusResults // Focus on results, not details
 
 	// Set up details panel with scrollable content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-scroll-results-focus",
 		TitleText: "Scrollable Issue",
 		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n" +
 			"Line 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 	initialOffset := m.details.YOffset()
 
@@ -1797,13 +1797,13 @@ func TestSearch_MouseScrollWorksWhenFocusedOnSearch(t *testing.T) {
 	m.input.Focus()
 
 	// Set up details panel with scrollable content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:        "test-scroll-search-focus",
 		TitleText: "Scrollable Issue",
 		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n" +
 			"Line 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 	initialOffset := m.details.YOffset()
 
@@ -1823,12 +1823,12 @@ func TestSearch_MouseClickIgnoredWhenNotFocusedOnDetails(t *testing.T) {
 	m.focus = FocusResults // Focus on results, not details
 
 	// Set up details panel
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-ignore",
 		TitleText:       "Test Issue",
 		DescriptionText: "Line 1\nLine 2\nLine 3\nLine 4\nLine 5",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 
 	// Verify preconditions
@@ -1850,12 +1850,12 @@ func TestSearch_MouseClickIgnoredWhenFocusedOnSearch(t *testing.T) {
 	m.input.Focus()
 
 	// Set up details panel
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-ignore-search",
 		TitleText:       "Test Issue",
 		DescriptionText: "Some content",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 
 	// Verify preconditions
@@ -1876,12 +1876,12 @@ func TestSearch_MouseScrollAtBoundary_DoesNotGoNegative(t *testing.T) {
 	m.focus = FocusDetails
 
 	// Set up details panel at top of content
-	issue := beads.Issue{
+	issue := task.Issue{
 		ID:              "test-boundary",
 		TitleText:       "Boundary Test",
 		DescriptionText: "Line 1\nLine 2\nLine 3",
 	}
-	m.details = details.New(issue, m.services.Executor, m.services.Client).SetSize(50, 10)
+	m.details = details.New(issue, m.services.QueryExecutor, nil, m.services.TaskExecutor).SetSize(50, 10)
 	m.hasDetail = true
 
 	// Ensure we're at the top (offset 0)
@@ -1956,18 +1956,18 @@ func createTestModelWithActions(t *testing.T) Model {
 	clipboard := mocks.NewMockClipboard(t)
 	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
 
-	mockClient := mocks.NewMockBeadsClient(t)
-	mockClient.EXPECT().GetComments(mock.Anything).Return([]beads.Comment{}, nil).Maybe()
+	mockTaskExec := mocks.NewMockTaskExecutor(t)
+	mockTaskExec.EXPECT().GetComments(mock.Anything).Return([]task.Comment{}, nil).Maybe()
 
-	mockExecutor := mocks.NewMockBQLExecutor(t)
-	mockExecutor.EXPECT().Execute(mock.Anything).Return([]beads.Issue{}, nil).Maybe()
+	mockExecutor := mocks.NewMockQueryExecutor(t)
+	mockExecutor.EXPECT().Execute(mock.Anything).Return([]task.Issue{}, nil).Maybe()
 
 	services := mode.Services{
-		Client:    mockClient,
-		Executor:  mockExecutor,
-		Config:    &cfg,
-		Clipboard: clipboard,
-		WorkDir:   "/tmp/test",
+		TaskExecutor:  mockTaskExec,
+		QueryExecutor: mockExecutor,
+		Config:        &cfg,
+		Clipboard:     clipboard,
+		WorkDir:       "/tmp/test",
 	}
 
 	m := New(services)
@@ -1975,9 +1975,9 @@ func createTestModelWithActions(t *testing.T) Model {
 	m.height = 40
 
 	// Load some test results
-	issues := []beads.Issue{
-		{ID: "test-1", TitleText: "First Issue", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeTask},
-		{ID: "test-2", TitleText: "Second Issue", Priority: 2, Status: beads.StatusInProgress, Type: beads.TypeBug},
+	issues := []task.Issue{
+		{ID: "test-1", TitleText: "First Issue", Priority: 1, Status: task.StatusOpen, Type: task.TypeTask},
+		{ID: "test-2", TitleText: "Second Issue", Priority: 2, Status: task.StatusInProgress, Type: task.TypeBug},
 	}
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
 
@@ -2325,10 +2325,10 @@ func TestSearch_MouseClick_SelectsIssueInList(t *testing.T) {
 	issueID3 := "mouse-click-select-test-issue-3"
 
 	m := createTestModel(t)
-	issues := []beads.Issue{
-		{ID: issueID1, TitleText: "First Issue", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeTask},
-		{ID: issueID2, TitleText: "Second Issue", Priority: 2, Status: beads.StatusInProgress, Type: beads.TypeBug},
-		{ID: issueID3, TitleText: "Third Issue", Priority: 0, Status: beads.StatusOpen, Type: beads.TypeFeature},
+	issues := []task.Issue{
+		{ID: issueID1, TitleText: "First Issue", Priority: 1, Status: task.StatusOpen, Type: task.TypeTask},
+		{ID: issueID2, TitleText: "Second Issue", Priority: 2, Status: task.StatusInProgress, Type: task.TypeBug},
+		{ID: issueID3, TitleText: "Third Issue", Priority: 0, Status: task.StatusOpen, Type: task.TypeFeature},
 	}
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
 	m.focus = FocusDetails // Start with different focus to verify it changes
@@ -2381,8 +2381,8 @@ func TestSearch_MouseClick_ChangesFocusToResults(t *testing.T) {
 	issueID := "focus-change-test-issue"
 
 	m := createTestModel(t)
-	issues := []beads.Issue{
-		{ID: issueID, TitleText: "Test Issue", Priority: 1, Status: beads.StatusOpen, Type: beads.TypeTask},
+	issues := []task.Issue{
+		{ID: issueID, TitleText: "Test Issue", Priority: 1, Status: task.StatusOpen, Type: task.TypeTask},
 	}
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
 	m.focus = FocusSearch // Start focused on search input
@@ -2419,8 +2419,8 @@ func TestSearch_MouseClick_UpdatesDetailPanel(t *testing.T) {
 	issueTitle := "Test Issue for Detail Panel"
 
 	m := createTestModel(t)
-	issues := []beads.Issue{
-		{ID: issueID, TitleText: issueTitle, Priority: 1, Status: beads.StatusOpen, Type: beads.TypeTask},
+	issues := []task.Issue{
+		{ID: issueID, TitleText: issueTitle, Priority: 1, Status: task.StatusOpen, Type: task.TypeTask},
 	}
 	m, _ = m.handleSearchResults(searchResultsMsg{issues: issues, err: nil})
 	m.hasDetail = false // Start without detail
@@ -2545,28 +2545,28 @@ func TestSearch_SaveMsg_UpdatesNotesOnlyWhenChanged(t *testing.T) {
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor - UpdateIssue called but Notes should be nil
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Notes == nil // Notes should NOT be included when unchanged
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Set up selectedIssue with original notes
-	m.selectedIssue = &beads.Issue{
+	m.selectedIssue = &task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: "Test description",
 		Notes:           "original notes",
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 	}
 	m.view = ViewEditIssue
 
 	// Send SaveMsg with same notes as original but changed labels
 	m, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:     "test-1",
-		Priority:    beads.PriorityMedium,
-		Status:      beads.StatusOpen,
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
 		Labels:      []string{"changed"}, // Changed to ensure UpdateIssue is called
 		Title:       "Test Issue",        // Same as original
 		Description: "Test description",  // Same as original
@@ -2587,28 +2587,28 @@ func TestSearch_SaveMsg_UpdatesNotesWhenChanged(t *testing.T) {
 	m := createTestModelWithResults(t)
 
 	// Set up mock executor - UpdateIssue called with Notes set
-	mockExecutor := mocks.NewMockIssueExecutor(t)
-	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts beads.UpdateIssueOptions) bool {
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().UpdateIssue("test-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
 		return opts.Notes != nil && *opts.Notes == "new notes content"
 	})).Return(nil)
-	m.services.BeadsExecutor = mockExecutor
+	m.services.TaskExecutor = mockExecutor
 
 	// Set up selectedIssue with original notes
-	m.selectedIssue = &beads.Issue{
+	m.selectedIssue = &task.Issue{
 		ID:              "test-1",
 		TitleText:       "Test Issue",
 		DescriptionText: "Test description",
 		Notes:           "original notes",
-		Priority:        beads.PriorityMedium,
-		Status:          beads.StatusOpen,
+		Priority:        task.PriorityMedium,
+		Status:          task.StatusOpen,
 	}
 	m.view = ViewEditIssue
 
 	// Send SaveMsg with different notes
 	m, cmd := m.Update(issueeditor.SaveMsg{
 		IssueID:     "test-1",
-		Priority:    beads.PriorityMedium,
-		Status:      beads.StatusOpen,
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
 		Labels:      nil,
 		Title:       "Test Issue",        // Same as original
 		Description: "Test description",  // Same as original

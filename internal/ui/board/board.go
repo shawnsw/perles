@@ -7,11 +7,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 	"github.com/zjrosen/perles/internal/mode/shared"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/panes"
 	"github.com/zjrosen/perles/internal/ui/styles"
 )
@@ -52,8 +51,8 @@ type Model struct {
 	// Active view's columns (for backward compatibility)
 	columns  []BoardColumn
 	configs  []config.ColumnConfig
-	executor bql.BQLExecutor // BQL executor for column loading
-	clock    shared.Clock    // Clock for timestamp formatting
+	executor task.QueryExecutor // query executor for column loading
+	clock    shared.Clock       // Clock for timestamp formatting
 	focused  int
 	width    int
 	height   int
@@ -64,7 +63,7 @@ type Model struct {
 }
 
 // NewFromViews creates a board from multiple view configurations.
-func NewFromViews(viewConfigs []config.ViewConfig, executor bql.BQLExecutor, clock shared.Clock) Model {
+func NewFromViews(viewConfigs []config.ViewConfig, executor task.QueryExecutor, clock shared.Clock) Model {
 	views := make([]View, len(viewConfigs))
 
 	for i, vc := range viewConfigs {
@@ -161,7 +160,7 @@ func (m Model) SetShowCounts(show bool) Model {
 }
 
 // SelectedIssue returns the currently selected issue.
-func (m Model) SelectedIssue() *beads.Issue {
+func (m Model) SelectedIssue() *task.Issue {
 	if m.focused < 0 || m.focused >= len(m.columns) {
 		return nil
 	}

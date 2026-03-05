@@ -6,8 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/config"
+	"github.com/zjrosen/perles/internal/task"
 )
 
 // =============================================================================
@@ -15,7 +15,7 @@ import (
 // =============================================================================
 
 func TestNewIssueContext(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "ISSUE-123",
 		TitleText: "Fix the bug",
 	}
@@ -34,7 +34,7 @@ func TestNewIssueContext_NilIssue(t *testing.T) {
 }
 
 func TestNewIssueContext_TitleWithSpecialChars(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "TEST-1",
 		TitleText: "Fix bug with 'quotes'",
 	}
@@ -101,13 +101,13 @@ func TestRenderCommand_TemplateVariables(t *testing.T) {
 	tests := []struct {
 		name     string
 		tmpl     string
-		issue    *beads.Issue
+		issue    *task.Issue
 		expected string
 	}{
 		{
 			name: "both ID and Title populated",
 			tmpl: "echo {{.ID}} - {{.Title}}",
-			issue: &beads.Issue{
+			issue: &task.Issue{
 				ID:        "PROJ-456",
 				TitleText: "Important feature",
 			},
@@ -116,7 +116,7 @@ func TestRenderCommand_TemplateVariables(t *testing.T) {
 		{
 			name: "complex command with template - user handles quoting",
 			tmpl: `tmux split-window -h "claude 'Work on {{.ID}}: {{.Title}}'"`,
-			issue: &beads.Issue{
+			issue: &task.Issue{
 				ID:        "BUG-123",
 				TitleText: "Fix login",
 			},
@@ -139,7 +139,7 @@ func TestRenderCommand_TemplateVariables(t *testing.T) {
 // =============================================================================
 
 func TestExecuteAction_Success(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "TEST-123",
 		TitleText: "Test issue",
 	}
@@ -159,7 +159,7 @@ func TestExecuteAction_Success(t *testing.T) {
 }
 
 func TestExecuteAction_TemplateRenderingError(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID: "TEST-123",
 	}
 	action := config.ActionConfig{
@@ -178,7 +178,7 @@ func TestExecuteAction_TemplateRenderingError(t *testing.T) {
 }
 
 func TestExecuteAction_StartsCommand(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID:        "ISSUE-456",
 		TitleText: "Fix the bug",
 	}
@@ -213,7 +213,7 @@ func TestExecuteAction_NilIssue(t *testing.T) {
 }
 
 func TestExecuteAction_EmptyCommand(t *testing.T) {
-	issue := &beads.Issue{
+	issue := &task.Issue{
 		ID: "TEST-123",
 	}
 	action := config.ActionConfig{

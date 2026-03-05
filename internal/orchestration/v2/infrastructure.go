@@ -10,8 +10,6 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	appbeads "github.com/zjrosen/perles/internal/beads/application"
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/orchestration/client"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	fabricrepo "github.com/zjrosen/perles/internal/orchestration/fabric/repository"
@@ -25,6 +23,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/v2/repository"
 	"github.com/zjrosen/perles/internal/pubsub"
 	"github.com/zjrosen/perles/internal/sound"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 )
 
 // eventBusAdapter adapts pubsub.Broker to the processor.EventPublisher interface.
@@ -86,6 +85,10 @@ type InfrastructureConfig struct {
 	// CommandPersistenceProvider returns the current CommandWriter for persisting commands.
 	// Optional - if nil, commands are not persisted to commands.jsonl.
 	CommandPersistenceProvider func() processor.CommandWriter
+	// TaskExecutor provides write access to the task backend for syncing
+	// orchestration state changes (task creation, status updates, etc.).
+	// If nil, a beads executor is created from WorkDir/BeadsDir (legacy behavior).
+	TaskExecutor taskpkg.TaskExecutor
 }
 
 // Validate checks that all required configuration is provided.
@@ -235,8 +238,7 @@ func NewInfrastructure(cfg InfrastructureConfig) (*Infrastructure, error) {
 	// Create turn completion enforcer for tracking worker tool calls
 	turnEnforcer := handler.NewTurnCompletionTracker()
 
-	// Create BDTaskExecutor for syncing v2 state changes to BD tracker
-	beadsExec := infrabeads.NewBDExecutor(cfg.WorkDir, cfg.BeadsDir)
+	taskExec := cfg.TaskExecutor
 
 	// Register all command handlers
 	registerHandlers(
@@ -252,7 +254,7 @@ func NewInfrastructure(cfg InfrastructureConfig) (*Infrastructure, error) {
 		coordinatorExtensions,
 		workerExtensions,
 		observerExtensions,
-		beadsExec,
+		taskExec,
 		cfg.Port,
 		eventBus,
 		cfg.WorkDir,
@@ -367,7 +369,7 @@ func registerHandlers(
 	coordinatorExtensions map[string]any,
 	workerExtensions map[string]any,
 	observerExtensions map[string]any,
-	beadsExec appbeads.IssueExecutor,
+	beadsExec taskpkg.TaskExecutor,
 	port int,
 	eventBus *pubsub.Broker[any],
 	workDir string,

@@ -10,10 +10,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
-	"github.com/zjrosen/perles/internal/bql"
+	"github.com/zjrosen/perles/internal/beads/bql"
 	"github.com/zjrosen/perles/internal/log"
 	"github.com/zjrosen/perles/internal/pubsub"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/commandpalette"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/chainart"
@@ -1465,32 +1465,27 @@ type IssueBadgeDemoModel struct {
 	height      int
 }
 
-// ptrBool returns a pointer to a bool value.
-func ptrBool(b bool) *bool {
-	return &b
-}
-
 // sampleIssues provides examples for the demo, showcasing all issue types and priorities.
-var sampleIssues = []beads.Issue{
+var sampleIssues = []task.Issue{
 	// All 8 issue types
-	{ID: "demo-e01", Type: beads.TypeEpic, Priority: 1, TitleText: "Epic: User Authentication System"},
-	{ID: "demo-t02", Type: beads.TypeTask, Priority: 2, TitleText: "Task: Implement login form validation"},
-	{ID: "demo-f03", Type: beads.TypeFeature, Priority: 1, TitleText: "Feature: Add dark mode support"},
-	{ID: "demo-b04", Type: beads.TypeBug, Priority: 0, TitleText: "Bug: Fix memory leak in cache"},
-	{ID: "demo-c05", Type: beads.TypeChore, Priority: 3, TitleText: "Chore: Update dependencies"},
-	{ID: "demo-m06", Type: beads.TypeMolecule, Priority: 2, TitleText: "Molecule: Reusable auth component"},
-	{ID: "demo-v07", Type: beads.TypeConvoy, Priority: 2, TitleText: "Convoy: Batch deployment pipeline"},
-	{ID: "demo-a08", Type: beads.TypeAgent, Priority: 2, TitleText: "Agent: AI-assisted task automation"},
+	{ID: "demo-e01", Type: task.TypeEpic, Priority: 1, TitleText: "Epic: User Authentication System"},
+	{ID: "demo-t02", Type: task.TypeTask, Priority: 2, TitleText: "Task: Implement login form validation"},
+	{ID: "demo-f03", Type: task.TypeFeature, Priority: 1, TitleText: "Feature: Add dark mode support"},
+	{ID: "demo-b04", Type: task.TypeBug, Priority: 0, TitleText: "Bug: Fix memory leak in cache"},
+	{ID: "demo-c05", Type: task.TypeChore, Priority: 3, TitleText: "Chore: Update dependencies"},
+	{ID: "demo-m06", Type: task.IssueType("molecule"), Priority: 2, TitleText: "Molecule: Reusable auth component"},
+	{ID: "demo-v07", Type: task.IssueType("convoy"), Priority: 2, TitleText: "Convoy: Batch deployment pipeline"},
+	{ID: "demo-a08", Type: task.IssueType("agent"), Priority: 2, TitleText: "Agent: AI-assisted task automation"},
 	// All 5 priority levels
-	{ID: "demo-p0", Type: beads.TypeBug, Priority: 0, TitleText: "P0 Critical: Security vulnerability"},
-	{ID: "demo-p1", Type: beads.TypeFeature, Priority: 1, TitleText: "P1 High: Core feature request"},
-	{ID: "demo-p2", Type: beads.TypeTask, Priority: 2, TitleText: "P2 Medium: Standard work item"},
-	{ID: "demo-p3", Type: beads.TypeChore, Priority: 3, TitleText: "P3 Low: Nice to have improvement"},
-	{ID: "demo-p4", Type: beads.TypeTask, Priority: 4, TitleText: "P4 Backlog: Future consideration"},
+	{ID: "demo-p0", Type: task.TypeBug, Priority: 0, TitleText: "P0 Critical: Security vulnerability"},
+	{ID: "demo-p1", Type: task.TypeFeature, Priority: 1, TitleText: "P1 High: Core feature request"},
+	{ID: "demo-p2", Type: task.TypeTask, Priority: 2, TitleText: "P2 Medium: Standard work item"},
+	{ID: "demo-p3", Type: task.TypeChore, Priority: 3, TitleText: "P3 Low: Nice to have improvement"},
+	{ID: "demo-p4", Type: task.TypeTask, Priority: 4, TitleText: "P4 Backlog: Future consideration"},
 	// Long title for truncation demo
-	{ID: "demo-long", Type: beads.TypeFeature, Priority: 2, TitleText: "This is a very long title that will be truncated to demonstrate the MaxWidth configuration option in action"},
+	{ID: "demo-long", Type: task.TypeFeature, Priority: 2, TitleText: "This is a very long title that will be truncated to demonstrate the MaxWidth configuration option in action"},
 	// Pinned issue demo
-	{ID: "demo-pin", Type: beads.TypeTask, Priority: 1, TitleText: "Pinned: Important task always visible", Pinned: ptrBool(true)},
+	{ID: "demo-pin", Type: task.TypeTask, Priority: 1, TitleText: "Pinned: Important task always visible", Extensions: map[string]any{"pinned": true}},
 }
 
 func createIssueBadgeDemo(width, height int) DemoModel {
@@ -1658,13 +1653,13 @@ func (m *IssueeditorDemoModel) Update(msg tea.Msg) (DemoModel, tea.Cmd, string) 
 		case tea.KeyMsg:
 			if msg.String() == "enter" {
 				// Create issueeditor with sample values
-				issue := beads.Issue{
+				issue := task.Issue{
 					ID:        "demo-123",
 					TitleText: "Demo Issue Title",
-					Type:      beads.TypeTask,
+					Type:      task.TypeTask,
 					Labels:    []string{"bug", "enhancement", "documentation"},
-					Priority:  beads.PriorityMedium,
-					Status:    beads.StatusOpen,
+					Priority:  task.PriorityMedium,
+					Status:    task.StatusOpen,
 				}
 				editor := issueeditor.New(issue).SetSize(m.width, m.height)
 				m.issueeditor = &editor

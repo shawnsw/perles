@@ -20,7 +20,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
 	"github.com/zjrosen/perles/internal/flags"
 	"github.com/zjrosen/perles/internal/frontend"
 	appgit "github.com/zjrosen/perles/internal/git/application"
@@ -34,6 +33,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/metrics"
 	"github.com/zjrosen/perles/internal/orchestration/v2/processor"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
 	"github.com/zjrosen/perles/internal/ui/modals/help"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
@@ -77,7 +77,7 @@ const (
 
 // epicTreeLoadedMsg is sent when the epic tree data has been loaded.
 type epicTreeLoadedMsg struct {
-	Issues []beads.Issue
+	Issues []task.Issue
 	RootID string
 	Err    error
 }
@@ -124,7 +124,7 @@ type Model struct {
 
 	// Issue editor modal state (nil when not showing)
 	issueEditor  *issueeditor.Model
-	editingIssue *beads.Issue // Original issue being edited (for change detection)
+	editingIssue *task.Issue // Original issue being edited (for change detection)
 
 	// Filter state
 	filter FilterState
@@ -1923,7 +1923,7 @@ type workflowArchivedMsg struct {
 // issueSavedMsg signals completion of a consolidated issue save.
 type issueSavedMsg struct {
 	issueID string
-	opts    beads.UpdateIssueOptions
+	opts    task.UpdateOptions
 	err     error
 }
 
@@ -1954,7 +1954,7 @@ func (m Model) openNewWorkflowModal() (mode.Controller, tea.Cmd) {
 		m.controlPlane,
 		gitExec,
 		m.workflowCreator,
-		m.services.Executor, // BQL executor for epic search fields
+		m.services.QueryExecutor, // BQL executor for epic search fields
 		m.vimMode,
 		m.workDir,
 	).SetSize(m.width, m.height)
@@ -1976,9 +1976,9 @@ func (m Model) startWorkflow(id controlplane.WorkflowID) tea.Cmd {
 }
 
 // saveIssueCmd creates a command to save all changed fields via a single UpdateIssue call.
-func (m Model) saveIssueCmd(issueID string, opts beads.UpdateIssueOptions) tea.Cmd {
+func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 	return func() tea.Msg {
-		err := m.services.BeadsExecutor.UpdateIssue(issueID, opts)
+		err := m.services.TaskExecutor.UpdateIssue(issueID, opts)
 		return issueSavedMsg{issueID: issueID, opts: opts, err: err}
 	}
 }
@@ -2004,7 +2004,7 @@ func (m Model) handleIssueSaved(msg issueSavedMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	return m, loadEpicTree(m.lastLoadedEpicID, m.services.Executor)
+	return m, loadEpicTree(m.lastLoadedEpicID, m.services.QueryExecutor)
 }
 
 // InNewWorkflowModal returns true if the new workflow modal is showing.
@@ -2150,7 +2150,7 @@ func (m Model) HandleDBChanged() (Model, tea.Cmd) {
 	}
 
 	// Trigger a tree refresh by loading the epic tree again
-	return m, loadEpicTree(m.lastLoadedEpicID, m.services.Executor)
+	return m, loadEpicTree(m.lastLoadedEpicID, m.services.QueryExecutor)
 }
 
 // === Focus Management ===

@@ -5,17 +5,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	infrabeads "github.com/zjrosen/perles/internal/beads/infrastructure"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/keys"
 
 	"github.com/stretchr/testify/require"
 )
 
-// TestNoBeadsDirectory_BeadsClientFails verifies that appbeads.NewSQLiteClient returns
-// an error when there's no .beads directory. This is the condition that triggers
-// the nobeads empty state view.
-func TestNoBeadsDirectory_BeadsClientFails(t *testing.T) {
+// TestNoBeadsDirectory_BackendFails verifies that newBackend returns an error
+// when there's no .beads directory. This is the condition that triggers the
+// nobeads empty state view.
+func TestNoBeadsDirectory_BackendFails(t *testing.T) {
 	// Create temp directory without .beads
 	tmpDir, err := os.MkdirTemp("", "perles-test-nobeads-*")
 	require.NoError(t, err)
@@ -26,12 +25,14 @@ func TestNoBeadsDirectory_BeadsClientFails(t *testing.T) {
 	_, err = os.Stat(beadsPath)
 	require.True(t, os.IsNotExist(err), "expected .beads to not exist")
 
-	// Verify NewSQLiteClient fails for this directory
-	_, err = infrabeads.NewSQLiteClient(tmpDir)
-	require.Error(t, err, "expected NewSQLiteClient to fail without .beads directory")
+	// Verify newBackend fails for this directory
+	cfg := config.Defaults()
+	cfg.ResolvedBeadsDir = filepath.Join(tmpDir, ".beads")
+	_, err = newBackend(&cfg, tmpDir)
+	require.Error(t, err, "expected newBackend to fail without .beads directory")
 }
 
-// TestNoBeadsDirectory_WithBeadsSucceeds verifies that appbeads.NewSQLiteClient succeeds
+// TestNoBeadsDirectory_WithBeadsSucceeds verifies that newBackend succeeds
 // when there IS a valid .beads directory.
 func TestNoBeadsDirectory_WithBeadsSucceeds(t *testing.T) {
 	// Use the actual project directory which has .beads
@@ -51,11 +52,12 @@ func TestNoBeadsDirectory_WithBeadsSucceeds(t *testing.T) {
 		projectRoot = cwd
 	}
 
-	// Verify NewSQLiteClient succeeds
-	client, err := infrabeads.NewSQLiteClient(projectRoot)
+	// Verify newBackend succeeds
+	cfg := config.Defaults()
+	cfg.ResolvedBeadsDir = filepath.Join(projectRoot, ".beads")
+	backend, err := newBackend(&cfg, projectRoot)
 	if err == nil {
-		// Clean up if we got a client
-		_ = client
+		_ = backend.Close()
 	}
 }
 

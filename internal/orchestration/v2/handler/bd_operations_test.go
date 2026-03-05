@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	beads "github.com/zjrosen/perles/internal/beads/domain"
+	taskpkg "github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/mocks"
 	"github.com/zjrosen/perles/internal/orchestration/events"
 	"github.com/zjrosen/perles/internal/orchestration/v2/command"
@@ -20,8 +20,8 @@ import (
 // ===========================================================================
 
 func TestMarkTaskCompleteHandler_Success(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	handler := NewMarkTaskCompleteHandler(bdExecutor, nil)
@@ -34,8 +34,8 @@ func TestMarkTaskCompleteHandler_Success(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_ReturnsResult(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	handler := NewMarkTaskCompleteHandler(bdExecutor, nil)
@@ -51,7 +51,7 @@ func TestMarkTaskCompleteHandler_ReturnsResult(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_FailsOnUpdateStatusError(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(errors.New("bd database locked"))
 
 	handler := NewMarkTaskCompleteHandler(bdExecutor, nil)
@@ -65,7 +65,7 @@ func TestMarkTaskCompleteHandler_FailsOnUpdateStatusError(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_FailsOnAddCommentError(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().UpdateStatus(mock.Anything, mock.Anything).Return(nil)
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bd comment service unavailable"))
 
@@ -86,8 +86,8 @@ func TestMarkTaskCompleteHandler_PanicsIfBDExecutorNil(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_DeletesTaskFromRepository(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	// Create task repo with a task
@@ -138,8 +138,8 @@ func TestMarkTaskCompleteHandler_DeletesTaskFromRepository(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_SucceedsWhenTaskNotInRepo(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	// Create empty task repo (task doesn't exist in memory)
@@ -156,8 +156,8 @@ func TestMarkTaskCompleteHandler_SucceedsWhenTaskNotInRepo(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_WorksWithNilTaskRepo(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	// Construct handler with nil taskRepo (backward compatibility)
@@ -176,8 +176,8 @@ func TestMarkTaskCompleteHandler_WorksWithNilTaskRepo(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_ResetsImplementerAndReviewer(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	// Create task with both implementer and reviewer
@@ -236,8 +236,8 @@ func TestMarkTaskCompleteHandler_ResetsImplementerAndReviewer(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_EmitsEventsForResetWorkers(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	taskRepo := repository.NewMemoryTaskRepository()
@@ -280,8 +280,8 @@ func TestMarkTaskCompleteHandler_EmitsEventsForResetWorkers(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_SkipsRetiredProcess(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	taskRepo := repository.NewMemoryTaskRepository()
@@ -318,8 +318,8 @@ func TestMarkTaskCompleteHandler_SkipsRetiredProcess(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_GracefulWithMissingProcess(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	taskRepo := repository.NewMemoryTaskRepository()
@@ -345,8 +345,8 @@ func TestMarkTaskCompleteHandler_GracefulWithMissingProcess(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_SkipsAlreadyIdleProcess(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	taskRepo := repository.NewMemoryTaskRepository()
@@ -389,8 +389,8 @@ func TestMarkTaskCompleteHandler_SkipsAlreadyIdleProcess(t *testing.T) {
 }
 
 func TestMarkTaskCompleteHandler_WorksWithNilProcessRepo(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
-	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", beads.StatusClosed).Return(nil)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
+	bdExecutor.EXPECT().UpdateStatus("perles-abc1.2", taskpkg.StatusClosed).Return(nil)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task completed").Return(nil)
 
 	// Task repo has a task but no processRepo provided (backward compatibility)
@@ -422,7 +422,7 @@ func TestMarkTaskCompleteHandler_WorksWithNilProcessRepo(t *testing.T) {
 // ===========================================================================
 
 func TestMarkTaskFailedHandler_Success(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// MarkTaskFailed only calls AddComment, not UpdateStatus
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task failed: Build failed due to missing dependency").Return(nil)
 
@@ -436,7 +436,7 @@ func TestMarkTaskFailedHandler_Success(t *testing.T) {
 }
 
 func TestMarkTaskFailedHandler_ReturnsResult(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task failed: Tests failing").Return(nil)
 
 	handler := NewMarkTaskFailedHandler(bdExecutor)
@@ -453,7 +453,7 @@ func TestMarkTaskFailedHandler_ReturnsResult(t *testing.T) {
 }
 
 func TestMarkTaskFailedHandler_FailsOnAddCommentError(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	bdExecutor.EXPECT().AddComment(mock.Anything, mock.Anything, mock.Anything).Return(errors.New("bd comment service unavailable"))
 
 	handler := NewMarkTaskFailedHandler(bdExecutor)
@@ -473,7 +473,7 @@ func TestMarkTaskFailedHandler_PanicsIfBDExecutorNil(t *testing.T) {
 }
 
 func TestMarkTaskFailedHandler_DoesNotUpdateStatus(t *testing.T) {
-	bdExecutor := mocks.NewMockIssueExecutor(t)
+	bdExecutor := mocks.NewMockTaskExecutor(t)
 	// MarkTaskFailed only calls AddComment, not UpdateStatus - verify UpdateStatus is never called
 	bdExecutor.EXPECT().AddComment("perles-abc1.2", "coordinator", "Task failed: Some reason").Return(nil)
 

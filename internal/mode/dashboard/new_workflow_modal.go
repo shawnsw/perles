@@ -11,11 +11,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/zjrosen/perles/internal/bql"
 	appgit "github.com/zjrosen/perles/internal/git/application"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	"github.com/zjrosen/perles/internal/registry/domain"
+	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 )
 
@@ -29,10 +29,10 @@ type NewWorkflowModal struct {
 	controlPlane    controlplane.ControlPlane
 	gitExecutor     appgit.GitExecutor
 	workflowCreator *appreg.WorkflowCreator
-	bqlExecutor     bql.BQLExecutor // BQL executor for epic search fields
-	worktreeEnabled bool            // track if worktree options are available
-	workDir         string          // application root directory (for filtering worktrees)
-	vimEnabled      bool            // whether vim mode is enabled for textarea fields
+	bqlExecutor     task.QueryExecutor // Query executor for epic search fields
+	worktreeEnabled bool               // track if worktree options are available
+	workDir         string             // application root directory (for filtering worktrees)
+	vimEnabled      bool               // whether vim mode is enabled for textarea fields
 
 	// templateArgs maps template key → slice of arguments for that template.
 	// Used to validate required arguments and build TemplateContext.Args on submit.
@@ -81,7 +81,7 @@ func NewNewWorkflowModal(
 	cp controlplane.ControlPlane,
 	gitExecutor appgit.GitExecutor,
 	workflowCreator *appreg.WorkflowCreator,
-	bqlExecutor bql.BQLExecutor,
+	bqlExecutor task.QueryExecutor,
 	vimEnabled bool,
 	workDir string,
 ) *NewWorkflowModal {
