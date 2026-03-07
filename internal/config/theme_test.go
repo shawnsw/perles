@@ -202,7 +202,7 @@ func TestThemeConfig_InvalidHexColor(t *testing.T) {
 // TestThemeConfig_EmptyConfig tests that empty theme config applies defaults.
 func TestThemeConfig_EmptyConfig(t *testing.T) {
 	configYAML := `
-auto_refresh: true
+beads_dir: ""
 `
 	cfg := loadConfigFromYAML(t, configYAML)
 

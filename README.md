@@ -92,7 +92,6 @@ perles
 |------|-------|-------------|
 | `--beads-dir` | `-b` | Path to beads database directory |
 | `--config` | `-c` | Path to config file |
-| `--no-auto-refresh` | | Disable automatic board refresh |
 | `--version` | `-v` | Print version |
 | `--help` | `-h` | Print help |
 | `--debug` | `-d` | Enable developer/debug mode |
@@ -458,7 +457,6 @@ Perles looks for configuration in these locations (in order):
 | Option                                           | Type | Default              | Description                                                   |
 |--------------------------------------------------|------|----------------------|---------------------------------------------------------------|
 | `beads_dir`                                      | string | `""`                 | Path to beads database directory (default: current directory) |
-| `auto_refresh`                                   | bool | `true`               | Auto-refresh when database changes                            |
 | `ui.show_counts`                                 | bool | `true`               | Show issue counts in column headers                           |
 | `ui.show_status_bar`                             | bool | `true`               | Show status bar at bottom                                     |
 | `ui.vim_mode`                                    | bool | `false`              | Vim support for all textarea inputs |
@@ -474,9 +472,6 @@ Perles looks for configuration in these locations (in order):
 ```yaml
 # Path to beads database directory (default: current directory)
 # beads_dir: /path/to/project
-
-# Auto-refresh when database changes
-auto_refresh: true
 
 # UI settings
 ui:

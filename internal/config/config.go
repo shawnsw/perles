@@ -35,7 +35,6 @@ type ViewConfig struct {
 type Config struct {
 	Backend       string              `mapstructure:"backend"` // "beads" (default), future: "linear", "github", etc.
 	BeadsDir      string              `mapstructure:"beads_dir"`
-	AutoRefresh   bool                `mapstructure:"auto_refresh"`
 	UI            UIConfig            `mapstructure:"ui"`
 	Theme         ThemeConfig         `mapstructure:"theme"`
 	Views         []ViewConfig        `mapstructure:"views"`
@@ -985,8 +984,7 @@ func (c *Config) SetColumnsForView(viewIndex int, columns []ColumnConfig) {
 // Defaults returns a Config with sensible default values.
 func Defaults() Config {
 	return Config{
-		Backend:     "beads",
-		AutoRefresh: true,
+		Backend: "beads",
 		UI: UIConfig{
 			ShowCounts:    true,
 			ShowStatusBar: true,
@@ -1050,9 +1048,6 @@ func DefaultConfigTemplate() string {
 
 # Path to beads database directory (default: current directory)
 # beads_dir: /path/to/project
-
-# Auto-refresh when database changes
-auto_refresh: true
 
 # UI settings
 ui:

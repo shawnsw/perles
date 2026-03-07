@@ -37,8 +37,7 @@ func TestSaveColumns_PreservesOtherConfig(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".perles.yaml")
 
 	// Create initial config with various settings
-	initial := `auto_refresh: true
-theme:
+	initial := `theme:
   highlight: "#FF0000"
   subtle: "#888888"
 ui:
@@ -59,7 +58,6 @@ ui:
 	require.NoError(t, err)
 	content := string(data)
 
-	require.Contains(t, content, "auto_refresh: true")
 	require.Contains(t, content, "highlight:")
 	require.Contains(t, content, "show_counts: false")
 	// And columns are there
@@ -578,8 +576,7 @@ func TestInsertColumnInView_PreservesOtherConfig(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".perles.yaml")
 
 	// Create initial config with other settings
-	initial := `auto_refresh: true
-theme:
+	initial := `theme:
   highlight: "#FF0000"
 views:
   - name: Default
@@ -610,7 +607,6 @@ views:
 	require.NoError(t, err)
 	content := string(data)
 
-	require.Contains(t, content, "auto_refresh: true")
 	require.Contains(t, content, "highlight:")
 	require.Contains(t, content, "name: New")
 	require.Contains(t, content, "name: Open")

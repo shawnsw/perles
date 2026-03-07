@@ -87,7 +87,6 @@ func TestDefaultColumns(t *testing.T) {
 func TestDefaults(t *testing.T) {
 	cfg := Defaults()
 
-	require.True(t, cfg.AutoRefresh)
 	require.Len(t, cfg.Views, 1)
 	require.Equal(t, "Default", cfg.Views[0].Name)
 	require.Len(t, cfg.Views[0].Columns, 4)
@@ -2317,7 +2316,6 @@ func TestConfigUnmarshal_PartialKeybindings(t *testing.T) {
 func TestKeybindingsConfig_NestedInConfig(t *testing.T) {
 	// Test that keybindings are properly nested in the full config hierarchy
 	cfg := Config{
-		AutoRefresh: true,
 		UI: UIConfig{
 			ShowCounts:    true,
 			ShowStatusBar: true,
@@ -2330,7 +2328,6 @@ func TestKeybindingsConfig_NestedInConfig(t *testing.T) {
 		},
 	}
 
-	require.True(t, cfg.AutoRefresh)
 	require.True(t, cfg.UI.ShowCounts)
 	require.Equal(t, "alt+s", cfg.UI.Keybindings.Search)
 	require.Equal(t, "f5", cfg.UI.Keybindings.Dashboard)

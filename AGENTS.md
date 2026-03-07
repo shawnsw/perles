@@ -566,7 +566,6 @@ Default: `~/.config/perles/config.yaml`
 
 ```yaml
 beads_dir: .beads                    # Database directory
-auto_refresh: true                    # Watch for changes
 
 ui:
   show_counts: true                   # Show issue counts

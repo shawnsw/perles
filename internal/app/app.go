@@ -150,7 +150,7 @@ func NewWithConfig(appCfg AppConfig) (Model, error) {
 	// Initialize global zone manager for mouse click detection (bubblezone)
 	zone.NewGlobal()
 
-	// Initialize file watcher if auto-refresh is enabled
+	// Initialize file watcher for database change detection
 	var (
 		watcherHandle   *watcher.Watcher
 		watcherCtx      context.Context
@@ -158,7 +158,7 @@ func NewWithConfig(appCfg AppConfig) (Model, error) {
 		watcherListener *pubsub.ContinuousListener[watcher.WatcherEvent]
 	)
 
-	if cfg.AutoRefresh && dbPath != "" {
+	if dbPath != "" {
 		debounceDur := watcherCfg.DebounceDuration
 		if debounceDur == 0 {
 			debounceDur = 100 * time.Millisecond
@@ -178,7 +178,7 @@ func NewWithConfig(appCfg AppConfig) (Model, error) {
 				_ = w.Stop()
 			}
 		}
-		// Silently ignore watcher init errors - app works fine without auto-refresh
+		// Silently ignore watcher init errors - app works fine without file watching
 	}
 
 	// Apply theme colors from config
@@ -284,8 +284,7 @@ func NewWithConfig(appCfg AppConfig) (Model, error) {
 }
 
 // Init implements tea.Model interface.
-// Defaults the application to Kanban mode and starts the watcher listener
-// if auto-refresh is enabled.
+// Defaults the application to Kanban mode and starts the watcher listener.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		m.kanban.Init(),

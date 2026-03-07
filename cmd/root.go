@@ -72,7 +72,6 @@ func init() {
 
 func initConfig() {
 	defaults := config.Defaults()
-	viper.SetDefault("auto_refresh", defaults.AutoRefresh)
 	viper.SetDefault("ui.show_counts", defaults.UI.ShowCounts)
 	viper.SetDefault("ui.markdown_style", defaults.UI.MarkdownStyle)
 	viper.SetDefault("theme.preset", defaults.Theme.Preset)
@@ -252,11 +251,6 @@ func runApp(cmd *cobra.Command, args []string) error {
 			return runOutdatedMode(versionErr.Current, versionErr.Required)
 		}
 		return fmt.Errorf("compatibility check: %w", err)
-	}
-
-	// Handle --no-auto-refresh flag (negated logic)
-	if noAutoRefresh, _ := cmd.Flags().GetBool("no-auto-refresh"); noAutoRefresh {
-		cfg.AutoRefresh = false
 	}
 
 	// Store the config file path for saving column changes
