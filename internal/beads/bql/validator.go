@@ -63,16 +63,23 @@ var ValidPriorityValues = map[string]bool{
 	"P4": true, "p4": true,
 }
 
-// Validate validates a BQL query and returns an error if invalid.
+// Validate validates a BQL query against the default ValidFields.
 func Validate(query *Query) error {
+	return ValidateWithFields(query, ValidFields)
+}
+
+// ValidateWithFields validates a BQL query against a custom set of valid fields.
+// This allows backends with different schemas (e.g. beads_rust) to reuse the BQL
+// parser and SQL builder while validating against their own column set.
+func ValidateWithFields(query *Query, validFields map[string]FieldType) error {
 	if query.Filter != nil {
-		if err := validateExpr(query.Filter); err != nil {
+		if err := validateExpr(query.Filter, validFields); err != nil {
 			return err
 		}
 	}
 
 	for _, term := range query.OrderBy {
-		if err := validateOrderField(term.Field); err != nil {
+		if err := validateOrderField(term.Field, validFields); err != nil {
 			return err
 		}
 	}
@@ -81,33 +88,33 @@ func Validate(query *Query) error {
 }
 
 // validateExpr validates an expression recursively.
-func validateExpr(expr Expr) error {
+func validateExpr(expr Expr, validFields map[string]FieldType) error {
 	switch e := expr.(type) {
 	case *BinaryExpr:
-		if err := validateExpr(e.Left); err != nil {
+		if err := validateExpr(e.Left, validFields); err != nil {
 			return err
 		}
-		return validateExpr(e.Right)
+		return validateExpr(e.Right, validFields)
 
 	case *NotExpr:
-		return validateExpr(e.Expr)
+		return validateExpr(e.Expr, validFields)
 
 	case *CompareExpr:
-		return validateCompare(e)
+		return validateCompare(e, validFields)
 
 	case *InExpr:
-		return validateIn(e)
+		return validateIn(e, validFields)
 	}
 
 	return nil
 }
 
 // validateCompare validates a comparison expression.
-func validateCompare(e *CompareExpr) error {
+func validateCompare(e *CompareExpr, validFields map[string]FieldType) error {
 	// Check field exists
-	fieldType, ok := ValidFields[e.Field]
+	fieldType, ok := validFields[e.Field]
 	if !ok {
-		return fmt.Errorf("unknown field: %q (valid: %s)", e.Field, validFieldNames())
+		return fmt.Errorf("unknown field: %q (valid: %s)", e.Field, fieldNamesFromMap(validFields))
 	}
 
 	// Check operator is valid for field type
@@ -120,11 +127,11 @@ func validateCompare(e *CompareExpr) error {
 }
 
 // validateIn validates an IN expression.
-func validateIn(e *InExpr) error {
+func validateIn(e *InExpr, validFields map[string]FieldType) error {
 	// Check field exists
-	fieldType, ok := ValidFields[e.Field]
+	fieldType, ok := validFields[e.Field]
 	if !ok {
-		return fmt.Errorf("unknown field: %q (valid: %s)", e.Field, validFieldNames())
+		return fmt.Errorf("unknown field: %q (valid: %s)", e.Field, fieldNamesFromMap(validFields))
 	}
 
 	// IN is only valid for enum, string, and priority fields
@@ -220,19 +227,19 @@ func validateValue(field string, fieldType FieldType, value Value) error {
 }
 
 // validateOrderField checks if a field can be used in ORDER BY.
-func validateOrderField(field string) error {
+func validateOrderField(field string, validFields map[string]FieldType) error {
 	// Check field exists
-	_, ok := ValidFields[field]
+	_, ok := validFields[field]
 	if !ok {
-		return fmt.Errorf("unknown field in ORDER BY: %q (valid: %s)", field, validFieldNames())
+		return fmt.Errorf("unknown field in ORDER BY: %q (valid: %s)", field, fieldNamesFromMap(validFields))
 	}
 	return nil
 }
 
-// validFieldNames returns a comma-separated list of valid field names.
-func validFieldNames() string {
-	names := make([]string, 0, len(ValidFields))
-	for name := range ValidFields {
+// fieldNamesFromMap returns a comma-separated list of field names from the given map.
+func fieldNamesFromMap(fields map[string]FieldType) string {
+	names := make([]string, 0, len(fields))
+	for name := range fields {
 		names = append(names, name)
 	}
 	return strings.Join(names, ", ")

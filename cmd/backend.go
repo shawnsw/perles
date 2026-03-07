@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	beadsadapter "github.com/zjrosen/perles/internal/beads/adapter"
+	"github.com/zjrosen/perles/internal/beadsrust"
 	"github.com/zjrosen/perles/internal/config"
 	"github.com/zjrosen/perles/internal/task"
 )
@@ -20,7 +21,9 @@ func newBackend(cfg *config.Config, workDir string) (task.Backend, error) {
 	switch backendType {
 	case "beads":
 		return beadsadapter.NewBeadsBackend(cfg.ResolvedBeadsDir, workDir)
+	case "beads_rust":
+		return beadsrust.NewBeadsRustBackend(cfg.ResolvedBeadsDir, workDir)
 	default:
-		return nil, fmt.Errorf("unknown backend: %q (available: beads)", backendType)
+		return nil, fmt.Errorf("unknown backend: %q (available: beads, beads_rust)", backendType)
 	}
 }

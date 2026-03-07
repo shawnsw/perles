@@ -9,14 +9,35 @@ import (
 
 // SQLBuilder converts a BQL AST to SQL.
 type SQLBuilder struct {
-	query   *Query
-	params  []any
-	dialect appbeads.SQLDialect
+	query      *Query
+	params     []any
+	dialect    appbeads.SQLDialect
+	readySQL   func(isReady bool) string   // optional override for ready field SQL
+	blockedSQL func(isBlocked bool) string // optional override for blocked field SQL
+}
+
+// SQLBuilderOption configures a SQLBuilder.
+type SQLBuilderOption func(*SQLBuilder)
+
+// WithReadySQL overrides the default ready field SQL generation.
+// This is used by backends that lack a ready_issues view (e.g. beads_rust)
+// to provide an inline subquery instead.
+func WithReadySQL(fn func(isReady bool) string) SQLBuilderOption {
+	return func(b *SQLBuilder) { b.readySQL = fn }
+}
+
+// WithBlockedSQL overrides the default blocked field SQL generation.
+func WithBlockedSQL(fn func(isBlocked bool) string) SQLBuilderOption {
+	return func(b *SQLBuilder) { b.blockedSQL = fn }
 }
 
 // NewSQLBuilder creates a builder for the query and dialect.
-func NewSQLBuilder(query *Query, dialect appbeads.SQLDialect) *SQLBuilder {
-	return &SQLBuilder{query: query, dialect: dialect}
+func NewSQLBuilder(query *Query, dialect appbeads.SQLDialect, opts ...SQLBuilderOption) *SQLBuilder {
+	b := &SQLBuilder{query: query, dialect: dialect}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b
 }
 
 // Build generates the SQL WHERE clause and ORDER BY.
@@ -301,7 +322,11 @@ AND EXISTS (
 
 // buildBlockedSQL returns the SQL fragment for the blocked field.
 // SQLite uses the blocked_issues_cache table; Dolt inlines the view SQL directly.
+// Backends can override via WithBlockedSQL.
 func (b *SQLBuilder) buildBlockedSQL(isBlocked bool) string {
+	if b.blockedSQL != nil {
+		return b.blockedSQL(isBlocked)
+	}
 	if b.dialect == appbeads.DialectMySQL {
 		if isBlocked {
 			return "i.id IN (" + doltBlockedSubquery + ")"
@@ -317,7 +342,11 @@ func (b *SQLBuilder) buildBlockedSQL(isBlocked bool) string {
 
 // buildReadySQL returns the SQL fragment for the ready field.
 // SQLite uses the ready_issues view; Dolt inlines the SQL to bypass views.
+// Backends can override via WithReadySQL.
 func (b *SQLBuilder) buildReadySQL(isReady bool) string {
+	if b.readySQL != nil {
+		return b.readySQL(isReady)
+	}
 	if b.dialect == appbeads.DialectMySQL {
 		readySubquery := `SELECT ri.id FROM issues ri
 WHERE ri.status = 'open'
