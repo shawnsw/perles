@@ -169,9 +169,7 @@ func (m *DeduplicationMiddleware) startCleanup(interval time.Duration) {
 	}
 	m.started = true
 
-	m.cleanupWg.Add(1)
-	go func() {
-		defer m.cleanupWg.Done()
+	m.cleanupWg.Go(func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -182,7 +180,7 @@ func (m *DeduplicationMiddleware) startCleanup(interval time.Duration) {
 				m.cleanupExpired()
 			}
 		}
-	}()
+	})
 }
 
 // cleanupExpired removes expired entries from the cache.
