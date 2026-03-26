@@ -20,7 +20,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
 <div class="grid cards" markdown>
 
--   **Kanban Board**
+- **Kanban Board**
 
     ---
 
@@ -28,7 +28,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
     [Kanban Mode](usage/kanban.md)
 
--   **BQL Search**
+- **BQL Search**
 
     ---
 
@@ -36,7 +36,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
     [Search Mode](usage/search.md)
 
--   **Dependency Explorer**
+- **Dependency Explorer**
 
     ---
 
@@ -44,7 +44,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
     [Dependency Explorer](usage/dependency-explorer.md)
 
--   **BQL Query Language**
+- **BQL Query Language**
 
     ---
 
@@ -52,7 +52,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
     [BQL Reference](bql/index.md)
 
--   **AI Orchestration**
+- **AI Orchestration**
 
     ---
 
@@ -60,7 +60,7 @@ A terminal UI for [beads](https://github.com/steveyegge/beads) issue tracking po
 
     [Orchestration](orchestration/index.md)
 
--   **Theming**
+- **Theming**
 
     ---
 
@@ -98,6 +98,6 @@ perles
 
 ## Requirements
 
-- A beads-enabled project (`.beads/` directory with `beads.db`)
-- Minimum beads database version v0.41.0 (run `bd migrate` to upgrade)
+- A beads-enabled project (`.beads/` directory)
+- Minimum beads database version v0.62.0 (run `bd migrate` to upgrade)
 - Go 1.21+ (if building from source)

@@ -1723,114 +1723,6 @@ func TestExecutor_CreatedByEmptyByDefault(t *testing.T) {
 }
 
 // =============================================================================
-// Agent Field Tests
-// =============================================================================
-
-func TestExecutor_AgentFieldsPopulated(t *testing.T) {
-	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
-		return b.
-			WithIssue("agent-1",
-				testutil.Title("Agent issue"),
-				testutil.HookBead("task-123"),
-				testutil.RoleBead("role-def-1"),
-				testutil.AgentState("running"),
-				testutil.RoleType("polecat"),
-				testutil.Rig("rig-alpha"),
-			)
-	})
-	defer func() { _ = db.Close() }()
-
-	executor := newTestExecutor(t, db)
-
-	issues, err := executor.Execute("id = agent-1")
-	require.NoError(t, err)
-
-	require.Len(t, issues, 1)
-	issue := issues[0]
-	require.Equal(t, "task-123", issue.HookBead)
-	require.Equal(t, "role-def-1", issue.RoleBead)
-	require.Equal(t, "running", issue.AgentState)
-	require.Equal(t, "polecat", issue.RoleType)
-	require.Equal(t, "rig-alpha", issue.Rig)
-}
-
-func TestExecutor_AgentFieldsEmptyByDefault(t *testing.T) {
-	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
-		return b.
-			WithIssue("issue-1", testutil.Title("Regular issue"))
-	})
-	defer func() { _ = db.Close() }()
-
-	executor := newTestExecutor(t, db)
-
-	issues, err := executor.Execute("id = issue-1")
-	require.NoError(t, err)
-
-	require.Len(t, issues, 1)
-	issue := issues[0]
-	require.Equal(t, "", issue.HookBead, "default hook_bead should be empty")
-	require.Equal(t, "", issue.RoleBead, "default role_bead should be empty")
-	require.Equal(t, "", issue.AgentState, "default agent_state should be empty")
-	require.Equal(t, "", issue.RoleType, "default role_type should be empty")
-	require.Equal(t, "", issue.Rig, "default rig should be empty")
-	require.True(t, issue.LastActivity.IsZero(), "default last_activity should be zero time")
-}
-
-func TestExecutor_QueryByAgentState(t *testing.T) {
-	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
-		return b.
-			WithIssue("agent-running", testutil.Title("Running agent"), testutil.AgentState("running")).
-			WithIssue("agent-idle", testutil.Title("Idle agent"), testutil.AgentState("idle")).
-			WithIssue("regular-issue", testutil.Title("Regular issue"))
-	})
-	defer func() { _ = db.Close() }()
-
-	executor := newTestExecutor(t, db)
-
-	issues, err := executor.Execute("agent_state = running")
-	require.NoError(t, err)
-
-	require.Len(t, issues, 1)
-	require.Equal(t, "agent-running", issues[0].ID)
-}
-
-func TestExecutor_QueryByRoleType(t *testing.T) {
-	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
-		return b.
-			WithIssue("polecat-agent", testutil.Title("Polecat agent"), testutil.RoleType("polecat")).
-			WithIssue("crew-agent", testutil.Title("Crew agent"), testutil.RoleType("crew")).
-			WithIssue("regular-issue", testutil.Title("Regular issue"))
-	})
-	defer func() { _ = db.Close() }()
-
-	executor := newTestExecutor(t, db)
-
-	issues, err := executor.Execute("role_type = polecat")
-	require.NoError(t, err)
-
-	require.Len(t, issues, 1)
-	require.Equal(t, "polecat-agent", issues[0].ID)
-}
-
-func TestExecutor_QueryByRig(t *testing.T) {
-	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
-		return b.
-			WithIssue("alpha-agent", testutil.Title("Alpha rig agent"), testutil.Rig("rig-alpha")).
-			WithIssue("beta-agent", testutil.Title("Beta rig agent"), testutil.Rig("rig-beta")).
-			WithIssue("town-agent", testutil.Title("Town agent")) // empty rig
-	})
-	defer func() { _ = db.Close() }()
-
-	executor := newTestExecutor(t, db)
-
-	issues, err := executor.Execute("rig = rig-alpha")
-	require.NoError(t, err)
-
-	require.Len(t, issues, 1)
-	require.Equal(t, "alpha-agent", issues[0].ID)
-}
-
-// =============================================================================
 // Benchmark Helper Functions
 // =============================================================================
 
@@ -2784,12 +2676,6 @@ CREATE TABLE issues (
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	closed_at DATETIME,
 	close_reason TEXT DEFAULT '',
-	hook_bead TEXT DEFAULT '',
-	role_bead TEXT DEFAULT '',
-	agent_state TEXT DEFAULT '',
-	last_activity DATETIME,
-	role_type TEXT DEFAULT '',
-	rig TEXT DEFAULT '',
 	mol_type TEXT DEFAULT ''
 );
 

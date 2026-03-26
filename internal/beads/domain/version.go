@@ -8,7 +8,7 @@ import (
 
 // MinBeadsVersion is the minimum beads database version required by perles.
 // Update this when perles starts using features from newer beads versions.
-const MinBeadsVersion = "0.41.0"
+const MinBeadsVersion = "0.62.0"
 
 // CheckVersion returns nil if current >= MinBeadsVersion, error otherwise.
 func CheckVersion(current string) error {

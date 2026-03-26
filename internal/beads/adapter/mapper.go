@@ -115,24 +115,6 @@ func ToTaskIssue(b domain.Issue) task.Issue {
 	if b.CreatedBy != "" {
 		ext["created_by"] = b.CreatedBy
 	}
-	if b.HookBead != "" {
-		ext["hook_bead"] = b.HookBead
-	}
-	if b.RoleBead != "" {
-		ext["role_bead"] = b.RoleBead
-	}
-	if b.AgentState != "" {
-		ext["agent_state"] = b.AgentState
-	}
-	if !b.LastActivity.IsZero() {
-		ext["last_activity"] = b.LastActivity
-	}
-	if b.RoleType != "" {
-		ext["role_type"] = b.RoleType
-	}
-	if b.Rig != "" {
-		ext["rig"] = b.Rig
-	}
 	if b.MolType != "" {
 		ext["mol_type"] = b.MolType
 	}

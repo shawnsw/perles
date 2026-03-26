@@ -69,14 +69,7 @@ type Issue struct {
 	ClosedAt           time.Time `json:"closed_at"`
 	CloseReason        string    `json:"close_reason,omitempty"`
 
-	// Agent fields (agent-as-bead pattern)
-	HookBead     string    `json:"hook_bead,omitempty"`
-	RoleBead     string    `json:"role_bead,omitempty"`
-	AgentState   string    `json:"agent_state,omitempty"`
-	LastActivity time.Time `json:"last_activity,omitzero"`
-	RoleType     string    `json:"role_type,omitempty"`
-	Rig          string    `json:"rig,omitempty"`
-	MolType      string    `json:"mol_type,omitempty"`
+	MolType string `json:"mol_type,omitempty"`
 
 	// Dependency tracking
 	BlockedBy      []string `json:"blocked_by"`

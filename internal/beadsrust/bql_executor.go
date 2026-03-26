@@ -16,8 +16,6 @@ import (
 
 // brValidFields defines the valid BQL fields for the beads_rust backend.
 // Compared to the default beads ValidFields this:
-//   - Excludes beads agent fields: hook_bead, role_bead, agent_state,
-//     last_activity, role_type, rig, mol_type.
 //   - Adds "owner" (beads_rust-specific field).
 //   - Supports "ready" via inline subquery (no ready_issues view needed).
 var brValidFields = map[string]bql.FieldType{

@@ -524,8 +524,9 @@ orchestration:
 
 ### Fields
 
-`id`, `type`, `status`, `priority`, `title`, `body`, `created`, `updated`,
-`parent_id`, `blocked`, `blocks`, `ready`, `label`, `assignee`
+`id`, `type`, `status`, `priority`, `title`, `description`, `design`, `notes`,
+`created`, `updated`, `blocked`, `ready`, `pinned`, `is_template`, `label`,
+`assignee`, `sender`, `created_by`, `mol_type`
 
 ### Operators
 

@@ -41,7 +41,7 @@ perles
 ## Requirements
 
 - A beads or beads-rust enabled project containing a` .beads/` directory
-- Minimum beads database version v0.41.0 (run `bd migrate` to upgrade)
+- Minimum beads database version v0.62.0 (run `bd migrate` to upgrade)
 
 ## License
 

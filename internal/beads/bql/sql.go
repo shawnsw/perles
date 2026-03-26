@@ -209,10 +209,9 @@ func (b *SQLBuilder) buildIn(e *InExpr) string {
 func (b *SQLBuilder) fieldToColumn(field string) string {
 	// Only map fields where BQL name differs from column name
 	mapping := map[string]string{
-		"type":          "i.issue_type",
-		"created":       "i.created_at",
-		"updated":       "i.updated_at",
-		"last_activity": "i.last_activity",
+		"type":    "i.issue_type",
+		"created": "i.created_at",
+		"updated": "i.updated_at",
 	}
 	if col, ok := mapping[field]; ok {
 		return col

@@ -48,7 +48,7 @@ func TestBRQueryHelpers_ValidateQuery(t *testing.T) {
 	// Valid: ready is supported via inline subquery.
 	require.NoError(t, h.ValidateQuery("ready = true"))
 
-	// Invalid: beads agent fields not valid in beads_rust.
+	// Invalid: removed agent-as-bead fields.
 	require.Error(t, h.ValidateQuery("hook_bead = test"))
 	require.Error(t, h.ValidateQuery("role_bead = test"))
 	require.Error(t, h.ValidateQuery("agent_state = test"))

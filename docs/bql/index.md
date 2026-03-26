@@ -64,15 +64,9 @@ type = epic expand down depth *
 | `assignee` | Assigned user | username |
 | `sender` | Issue sender | username |
 | `created_by` | Issue creator | username |
-| `hook_bead` | Agent's current work | bead ID |
-| `role_bead` | Agent's role definition | bead ID |
-| `agent_state` | Agent state | `idle`, `running`, `stuck`, `stopped` |
-| `role_type` | Agent role type | `polecat`, `crew`, `witness`, etc. |
-| `rig` | Agent's rig name | rig name (empty for town-level) |
 | `mol_type` | Molecule type | string |
 | `created` | Creation date | `today`, `yesterday`, `-7d`, `-3m` |
 | `updated` | Last update | `today`, `-24h` |
-| `last_activity` | Agent last activity | `today`, `-24h` |
 
 ---
 

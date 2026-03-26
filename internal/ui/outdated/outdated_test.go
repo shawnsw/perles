@@ -10,7 +10,7 @@ import (
 
 // testRequiredVersion is a representative minimum version string used in tests.
 // This avoids importing beads domain types into the backend-agnostic outdated UI.
-const testRequiredVersion = "0.41.0"
+const testRequiredVersion = "0.62.0"
 
 func TestOutdated_New(t *testing.T) {
 	m := New("0.29.0", testRequiredVersion)

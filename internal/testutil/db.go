@@ -35,12 +35,6 @@ CREATE TABLE issues (
 	closed_at DATETIME,
 	close_reason TEXT DEFAULT '',
 	deleted_at DATETIME,
-	hook_bead TEXT DEFAULT '',
-	role_bead TEXT DEFAULT '',
-	agent_state TEXT DEFAULT '',
-	last_activity DATETIME,
-	role_type TEXT DEFAULT '',
-	rig TEXT DEFAULT '',
 	mol_type TEXT DEFAULT '',
 	CHECK ((status = 'closed') = (closed_at IS NOT NULL) OR status IN ('deleted', 'tombstone'))
 );
