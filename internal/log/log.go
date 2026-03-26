@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -190,19 +191,22 @@ func log(level Level, cat Category, msg string, fields ...any) {
 
 	// Format: 2025-12-06T10:45:00 [ERROR] [bql] message key=value key2=value2
 	timestamp := time.Now().Format("2006-01-02T15:04:05")
-	entry := fmt.Sprintf("%s [%s] [%s] %s", timestamp, level, cat, msg)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s [%s] [%s] %s", timestamp, level, cat, msg)
 
 	// Append fields (key=value pairs)
 	for i := 0; i+1 < len(fields); i += 2 {
 		key := fields[i]
 		value := fields[i+1]
-		entry += fmt.Sprintf(" %v=%v", key, value)
+		fmt.Fprintf(&b, " %v=%v", key, value)
 	}
 	// Handle odd field count - append orphan key with no value
 	if len(fields)%2 != 0 {
-		entry += fmt.Sprintf(" %v=<missing>", fields[len(fields)-1])
+		fmt.Fprintf(&b, " %v=<missing>", fields[len(fields)-1])
 	}
-	entry += "\n"
+	b.WriteByte('\n')
+	entry := b.String()
 
 	// Write to file
 	if defaultLogger.writer != nil {
