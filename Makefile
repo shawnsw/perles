@@ -57,6 +57,7 @@ test-update:
 		./internal/ui/coleditor/... \
 		./internal/ui/commandpalette/... \
 		./internal/ui/details/... \
+		./internal/ui/embeddedmode/... \
 		./internal/ui/modals/help/... \
 		./internal/ui/modals/issueeditor/... \
 		./internal/ui/nobeads/... \

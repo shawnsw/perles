@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -35,6 +36,11 @@ type BeadsBackend struct {
 func NewBeadsBackend(dataDir, workDir string) (*BeadsBackend, error) {
 	client, err := infrabeads.NewClient(dataDir)
 	if err != nil {
+		// Check if embedded mode (exclusive lock, can't share with perles)
+		var embeddedErr *infrabeads.EmbeddedModeUnsupportedError
+		if errors.As(err, &embeddedErr) {
+			return nil, &task.EmbeddedModeError{BeadsDir: dataDir}
+		}
 		// Check if this is a Dolt server that's unreachable
 		if meta, metaErr := infrabeads.LoadMetadata(dataDir); metaErr == nil && meta.IsDoltServer() {
 			return nil, &task.ServerDownError{
@@ -143,7 +149,7 @@ func beadsCapabilities() task.BackendCapabilities {
 // detectWatcherConfig returns file watcher config based on the backend type.
 func detectWatcherConfig(dataDir string) task.WatcherConfig {
 	meta, err := infrabeads.LoadMetadata(dataDir)
-	if err == nil && meta.Backend == "dolt" {
+	if err == nil && meta.IsDoltServer() {
 		// Dolt server mode: watch last-touched sentinel file with longer debounce
 		// to coalesce rapid bd commands (e.g., bulk creates/deletes in a loop).
 		return task.WatcherConfig{

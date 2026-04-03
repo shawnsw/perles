@@ -20,6 +20,7 @@ import (
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/templates"
+	"github.com/zjrosen/perles/internal/ui/embeddedmode"
 	"github.com/zjrosen/perles/internal/ui/nobeads"
 	"github.com/zjrosen/perles/internal/ui/outdated"
 	"github.com/zjrosen/perles/internal/ui/serverdown"
@@ -235,6 +236,10 @@ func runApp(cmd *cobra.Command, args []string) error {
 
 	backend, err := newBackend(&cfg, workDir)
 	if err != nil {
+		var embeddedMode *task.EmbeddedModeError
+		if errors.As(err, &embeddedMode) {
+			return runEmbeddedMode()
+		}
 		var serverDown *task.ServerDownError
 		if errors.As(err, &serverDown) {
 			return serverNotStarted(serverDown.Host, serverDown.Port)
@@ -319,6 +324,21 @@ func SetVersion(v string) {
 // empty state view when no .beads directory is found.
 func runNoBeadsMode() error {
 	model := nobeads.New()
+	p := tea.NewProgram(
+		&model,
+		tea.WithAltScreen(),
+	)
+
+	_, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("running program: %w", err)
+	}
+	return nil
+}
+
+// runEmbeddedMode launches the TUI showing the embedded dolt mode screen.
+func runEmbeddedMode() error {
+	model := embeddedmode.New()
 	p := tea.NewProgram(
 		&model,
 		tea.WithAltScreen(),
