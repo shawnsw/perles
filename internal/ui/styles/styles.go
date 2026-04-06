@@ -129,6 +129,7 @@ var (
 	IssueFeatureColor   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
 	IssueMilestoneColor = lipgloss.AdaptiveColor{Light: "#E8A838", Dark: "#F0B84A"}
 	IssueStoryColor     = lipgloss.AdaptiveColor{Light: "#2DD4BF", Dark: "#2DD4BF"}
+	IssueSpikeColor     = lipgloss.AdaptiveColor{Light: "#E06C75", Dark: "#E06C75"}
 	IssueMoleculeColor  = lipgloss.AdaptiveColor{Light: "#FF731A", Dark: "#FF731A"}
 	IssueConvoyColor    = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"}
 	IssueAgentColor     = lipgloss.AdaptiveColor{Light: "#5C6BC0", Dark: "#5C6BC0"}
@@ -140,6 +141,7 @@ var (
 	TypeChoreStyle     = lipgloss.NewStyle().Foreground(IssueChoreColor)
 	TypeMilestoneStyle = lipgloss.NewStyle().Foreground(IssueMilestoneColor)
 	TypeStoryStyle     = lipgloss.NewStyle().Foreground(IssueStoryColor)
+	TypeSpikeStyle     = lipgloss.NewStyle().Foreground(IssueSpikeColor)
 	TypeMoleculeStyle  = lipgloss.NewStyle().Foreground(IssueMoleculeColor)
 	TypeConvoyStyle    = lipgloss.NewStyle().Foreground(IssueConvoyColor)
 	TypeAgentStyle     = lipgloss.NewStyle().Foreground(IssueAgentColor)
@@ -192,6 +194,8 @@ func GetTypeIndicator(t task.IssueType) string {
 		return "[M]"
 	case task.TypeStory:
 		return "[S]"
+	case task.TypeSpike:
+		return "[Sp]"
 	case task.IssueType("molecule"):
 		return "[Mo]"
 	case task.IssueType("convoy"):
@@ -220,6 +224,8 @@ func GetTypeStyle(t task.IssueType) lipgloss.Style {
 		return TypeMilestoneStyle
 	case task.TypeStory:
 		return TypeStoryStyle
+	case task.TypeSpike:
+		return TypeSpikeStyle
 	case task.IssueType("molecule"):
 		return TypeMoleculeStyle
 	case task.IssueType("convoy"):

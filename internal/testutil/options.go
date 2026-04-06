@@ -80,7 +80,7 @@ func Priority(p int) IssueOption {
 	return func(i *issueData) { i.priority = p }
 }
 
-// IssueType sets the issue type (bug, feature, task, epic, chore, milestone, story).
+// IssueType sets the issue type (bug, feature, task, epic, chore, milestone, story, spike).
 func IssueType(t string) IssueOption {
 	return func(i *issueData) { i.issueType = t }
 }

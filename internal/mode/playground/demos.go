@@ -1475,9 +1475,10 @@ var sampleIssues = []task.Issue{
 	{ID: "demo-c05", Type: task.TypeChore, Priority: 3, TitleText: "Chore: Update dependencies"},
 	{ID: "demo-mi06", Type: task.TypeMilestone, Priority: 1, TitleText: "Milestone: Q2 Release"},
 	{ID: "demo-s07", Type: task.TypeStory, Priority: 2, TitleText: "Story: As a user, I want to reset my password"},
-	{ID: "demo-m08", Type: task.IssueType("molecule"), Priority: 2, TitleText: "Molecule: Reusable auth component"},
-	{ID: "demo-v09", Type: task.IssueType("convoy"), Priority: 2, TitleText: "Convoy: Batch deployment pipeline"},
-	{ID: "demo-a10", Type: task.IssueType("agent"), Priority: 2, TitleText: "Agent: AI-assisted task automation"},
+	{ID: "demo-sp08", Type: task.TypeSpike, Priority: 2, TitleText: "Spike: Evaluate caching strategies"},
+	{ID: "demo-m09", Type: task.IssueType("molecule"), Priority: 2, TitleText: "Molecule: Reusable auth component"},
+	{ID: "demo-v10", Type: task.IssueType("convoy"), Priority: 2, TitleText: "Convoy: Batch deployment pipeline"},
+	{ID: "demo-a11", Type: task.IssueType("agent"), Priority: 2, TitleText: "Agent: AI-assisted task automation"},
 	// All 5 priority levels
 	{ID: "demo-p0", Type: task.TypeBug, Priority: 0, TitleText: "P0 Critical: Security vulnerability"},
 	{ID: "demo-p1", Type: task.TypeFeature, Priority: 1, TitleText: "P1 High: Core feature request"},
@@ -1531,7 +1532,7 @@ func (m *IssueBadgeDemoModel) View() string {
 	sb.WriteString("\n\n")
 
 	// Section 1: Issue Types
-	sb.WriteString(sectionStyle.Render("Issue Types (E/T/F/B/C/M/S/Mo/🚚/👨‍💼):"))
+	sb.WriteString(sectionStyle.Render("Issue Types (E/T/F/B/C/M/S/Sp/Mo/🚚/👨‍💼):"))
 	sb.WriteString("\n")
 	for i := range 8 {
 		issue := sampleIssues[i]

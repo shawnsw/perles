@@ -1961,7 +1961,7 @@ func formatNum(n int) string {
 }
 
 // issueTypes for realistic data distribution
-var issueTypes = []string{"bug", "feature", "task", "chore", "milestone", "story"}
+var issueTypes = []string{"bug", "feature", "task", "chore", "milestone", "story", "spike"}
 
 // labels for realistic data distribution
 var labels = [][]string{

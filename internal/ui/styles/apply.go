@@ -241,6 +241,9 @@ func applyColors(colors map[ColorToken]string) {
 	if c, ok := colors[TokenTypeStory]; ok {
 		IssueStoryColor = makeColor(c)
 	}
+	if c, ok := colors[TokenTypeSpike]; ok {
+		IssueSpikeColor = makeColor(c)
+	}
 	if c, ok := colors[TokenTypeMolecule]; ok {
 		IssueMoleculeColor = makeColor(c)
 	}
@@ -334,6 +337,7 @@ func rebuildStyles() {
 	TypeChoreStyle = lipgloss.NewStyle().Foreground(IssueChoreColor)
 	TypeMilestoneStyle = lipgloss.NewStyle().Foreground(IssueMilestoneColor)
 	TypeStoryStyle = lipgloss.NewStyle().Foreground(IssueStoryColor)
+	TypeSpikeStyle = lipgloss.NewStyle().Foreground(IssueSpikeColor)
 	TypeMoleculeStyle = lipgloss.NewStyle().Foreground(IssueMoleculeColor)
 	TypeConvoyStyle = lipgloss.NewStyle().Foreground(IssueConvoyColor)
 	TypeAgentStyle = lipgloss.NewStyle().Foreground(IssueAgentColor)

@@ -38,6 +38,7 @@ const (
 	TypeChore     IssueType = "chore"
 	TypeMilestone IssueType = "milestone"
 	TypeStory     IssueType = "story"
+	TypeSpike     IssueType = "spike"
 )
 
 // Comment represents a comment on an issue.

@@ -23,17 +23,19 @@
                                                                                 │  │                                                 │  
 BQL Query Help                                                                  │  │                                                 │  
                                                                                 │  │                                                 │  
-BQL Fields                                                       BQL Operators  │  ╰─────────────────────────────────────────────────╯  
-status      open, in_progress, closed, blocked, deferred         =  !=          │                                                       
+BQL Fields                                                              BQL     │  ╰─────────────────────────────────────────────────╯  
+Operators                                                                       │                                                       
+status      open, in_progress, closed, blocked, deferred                =  !=   │                                                       
 equality                                                                        │                                                       
-type        bug, feature, task, epic, chore, milestone, story    <  >           │                                                       
+type        bug, feature, task, epic, chore, milestone, story, spike    <  >    │                                                       
 comparison                                                                      │                                                       
-priority    p0, p1, p2, p3, p4                                   ~  !~          │                                                       
+priority    p0, p1, p2, p3, p4                                          ~  !~   │                                                       
 contains                                                                        │                                                       
-blocked     true, false                                          in      match  │                                                       
-any                                                                             │                                                       
-ready       true, false                                          and or  logical│                                                       
-pinned      true, false                                          not            │                                                       
+blocked     true, false                                                 in      │                                                       
+match any                                                                       │                                                       
+ready       true, false                                                 and or  │                                                       
+logical                                                                         │                                                       
+pinned      true, false                                                 not     │                                                       
 negation                                                                        │                                                       
 is_template true, false                                                         │                                                       
 label       string (use ~ for contains)                                         │                                                       
@@ -46,8 +48,8 @@ assignee    string                                                              
 sender      string                                                              │                                                       
 created_by  string                                                              │                                                       
 mol_type    string                                                              │                                                       
-created     date (today, yesterday, -7d)                                        │                                                       
-updated     date (today, yesterday, -7d)                                        │                                                       
+created     date (today, yesterday, -7d)                                                                                                
+updated     date (today, yesterday, -7d)                                                                                                
                                                                                                                                         
 Examples                                                                                                                                
 status = open                                                                                                                           

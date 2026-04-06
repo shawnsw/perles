@@ -71,6 +71,11 @@ func TestRenderBadge_IssueTypes(t *testing.T) {
 			issueType:    task.TypeStory,
 			wantContains: "[S]",
 		},
+		{
+			name:         "spike",
+			issueType:    task.TypeSpike,
+			wantContains: "[Sp]",
+		},
 	}
 
 	for _, tt := range tests {

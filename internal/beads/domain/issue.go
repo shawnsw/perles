@@ -35,6 +35,7 @@ const (
 	TypeChore     IssueType = "chore"
 	TypeMilestone IssueType = "milestone"
 	TypeStory     IssueType = "story"
+	TypeSpike     IssueType = "spike"
 	TypeMolecule  IssueType = "molecule"
 	TypeConvoy    IssueType = "convoy"
 	TypeAgent     IssueType = "agent"
