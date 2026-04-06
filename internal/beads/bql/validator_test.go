@@ -13,6 +13,8 @@ func TestValidate_ValidQueries(t *testing.T) {
 		"type = task",
 		"type = epic",
 		"type = chore",
+		"type = milestone",
+		"type = story",
 		"priority = P0",
 		"priority < P2",
 		"priority >= P1",

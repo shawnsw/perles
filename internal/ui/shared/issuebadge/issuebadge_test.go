@@ -61,6 +61,16 @@ func TestRenderBadge_IssueTypes(t *testing.T) {
 			issueType:    task.TypeChore,
 			wantContains: "[C]",
 		},
+		{
+			name:         "milestone",
+			issueType:    task.TypeMilestone,
+			wantContains: "[M]",
+		},
+		{
+			name:         "story",
+			issueType:    task.TypeStory,
+			wantContains: "[S]",
+		},
 	}
 
 	for _, tt := range tests {

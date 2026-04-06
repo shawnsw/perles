@@ -60,12 +60,14 @@ func renderPresetSample(presetName string) string {
 
 	// Issue type colors
 	b.WriteString("\nType Colors:\n")
-	b.WriteString(fmt.Sprintf("  %s  %s  %s  %s  %s\n",
+	b.WriteString(fmt.Sprintf("  %s  %s  %s  %s  %s  %s  %s\n",
 		TypeBugStyle.Render("bug"),
 		TypeFeatureStyle.Render("feature"),
 		TypeTaskStyle.Render("task"),
 		TypeEpicStyle.Render("epic"),
-		TypeChoreStyle.Render("chore")))
+		TypeChoreStyle.Render("chore"),
+		TypeMilestoneStyle.Render("milestone"),
+		TypeStoryStyle.Render("story")))
 
 	// Button styles
 	b.WriteString("\nButton Styles:\n")

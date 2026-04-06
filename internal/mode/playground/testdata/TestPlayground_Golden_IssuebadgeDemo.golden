@@ -3,27 +3,27 @@
 │ ────────────────────────── │  │ Use j/k to move selection                                        │
 │   vimtextarea              │  │                                                                  │
 │   modal                    │  │                                                                  │
-│   formmodal                │  │ Issue Types (E/T/F/B/C/M/🚚/👨‍💼):                                 │
+│   formmodal                │  │ Issue Types (E/T/F/B/C/M/S/Mo/🚚/👨‍💼):                            │
 │   panes                    │  │ >[E][P1][demo-e01] Epic: User Authentication System              │
 │   scrollpane               │  │  [T][P2][demo-t02] Task: Implement login form validation         │
 │   colorpicker              │  │  [F][P1][demo-f03] Feature: Add dark mode support                │
 │   picker                   │  │  [B][P0][demo-b04] Bug: Fix memory leak in cache                 │
 │   commandpalette           │  │  [C][P3][demo-c05] Chore: Update dependencies                    │
-│   toaster                  │  │  [M][P2][demo-m06] Molecule: Reusable auth component             │
-│   logoverlay               │  │  [🚚][P2][demo-v07] Convoy: Batch deployment pipeline            │
-│   markdown                 │  │  [👨‍💼][P2][demo-a08] Agent: AI-assisted task automation           │
+│   toaster                  │  │  [M][P1][demo-mi06] Milestone: Q2 Release                        │
+│   logoverlay               │  │  [S][P2][demo-s07] Story: As a user, I want to reset my password │
+│   markdown                 │  │  [Mo][P2][demo-m08] Molecule: Reusable auth component            │
 │   chainart                 │  │                                                                  │
 │ ● issuebadge               │  │                                                                  │
 │   issueeditor              │  │ Priority Levels (P0-P4):                                         │
-│   tabpane                  │  │  [B][P0][demo-p0] P0 Critical: Security vulnerability            │
-│   table                    │  │  [F][P1][demo-p1] P1 High: Core feature request                  │
-│   Theme Tokens             │  │  [T][P2][demo-p2] P2 Medium: Standard work item                  │
-│                            │  │  [C][P3][demo-p3] P3 Low: Nice to have improvement               │
-│                            │  │  [T][P4][demo-p4] P4 Backlog: Future consideration               │
+│   tabpane                  │  │  [🚚][P2][demo-v09] Convoy: Batch deployment pipeline            │
+│   table                    │  │  [👨‍💼][P2][demo-a10] Agent: AI-assisted task automation           │
+│   Theme Tokens             │  │  [B][P0][demo-p0] P0 Critical: Security vulnerability            │
+│                            │  │  [F][P1][demo-p1] P1 High: Core feature request                  │
+│                            │  │  [T][P2][demo-p2] P2 Medium: Standard work item                  │
 │                            │  │                                                                  │
 │                            │  │                                                                  │
 │                            │  │ Title Truncation (MaxWidth=60):                                  │
-│                            │  │  [F][P2][demo-long] This is a very long title that will b...     │
+│                            │  │  [C][P3][demo-p3] P3 Low: Nice to have improvement               │
 │                            │  │                                                                  │
 │                            │  │                                                                  │
 ╰────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────╯

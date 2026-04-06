@@ -41,11 +41,13 @@ const (
 
 // ValidTypeValues are the valid values for the type field.
 var ValidTypeValues = map[string]bool{
-	"bug":     true,
-	"feature": true,
-	"task":    true,
-	"epic":    true,
-	"chore":   true,
+	"bug":       true,
+	"feature":   true,
+	"task":      true,
+	"epic":      true,
+	"chore":     true,
+	"milestone": true,
+	"story":     true,
 }
 
 // ValidPriorityValues are the valid values for the priority field.
@@ -209,7 +211,7 @@ func validateValue(field string, fieldType FieldType, value Value) error {
 		switch field {
 		case "type":
 			if !ValidTypeValues[value.String] {
-				return fmt.Errorf("invalid value %q for field %q (valid: bug, feature, task, epic, chore)", value.String, field)
+				return fmt.Errorf("invalid value %q for field %q (valid: bug, feature, task, epic, chore, milestone, story)", value.String, field)
 			}
 		}
 

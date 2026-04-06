@@ -87,14 +87,16 @@ var DefaultPreset = Preset{
 		TokenPriorityBacklog:  "#666666",
 
 		// Issue type
-		TokenTypeTask:     "#54A0FF",
-		TokenTypeChore:    "#777777",
-		TokenTypeEpic:     "#7D56F4",
-		TokenTypeBug:      "#FF8787",
-		TokenTypeFeature:  "#73F59F",
-		TokenTypeMolecule: "#FF731A",
-		TokenTypeConvoy:   "#888888",
-		TokenTypeAgent:    "#5C6BC0", // indigo
+		TokenTypeTask:      "#54A0FF",
+		TokenTypeChore:     "#777777",
+		TokenTypeEpic:      "#7D56F4",
+		TokenTypeBug:       "#FF8787",
+		TokenTypeFeature:   "#73F59F",
+		TokenTypeMilestone: "#F0B84A", // gold
+		TokenTypeStory:     "#2DD4BF", // teal
+		TokenTypeMolecule:  "#FF731A",
+		TokenTypeConvoy:    "#888888",
+		TokenTypeAgent:     "#5C6BC0", // indigo
 
 		// BQL syntax highlighting (Catppuccin Mocha inspired)
 		TokenBQLKeyword:  "#CBA6F7",
@@ -185,14 +187,16 @@ var CatppuccinMochaPreset = Preset{
 		TokenPriorityBacklog:  "#6C7086", // overlay0
 
 		// Issue type
-		TokenTypeTask:     "#89B4FA", // blue
-		TokenTypeChore:    "#6C7086", // overlay0
-		TokenTypeEpic:     "#CBA6F7", // mauve
-		TokenTypeBug:      "#F38BA8", // red
-		TokenTypeFeature:  "#A6E3A1", // green
-		TokenTypeMolecule: "#FAB387", // peach
-		TokenTypeConvoy:   "#6C7086", // overlay0
-		TokenTypeAgent:    "#89B4FA", // blue
+		TokenTypeTask:      "#89B4FA", // blue
+		TokenTypeChore:     "#6C7086", // overlay0
+		TokenTypeEpic:      "#CBA6F7", // mauve
+		TokenTypeBug:       "#F38BA8", // red
+		TokenTypeFeature:   "#A6E3A1", // green
+		TokenTypeMilestone: "#F9E2AF", // yellow
+		TokenTypeStory:     "#94E2D5", // teal
+		TokenTypeMolecule:  "#FAB387", // peach
+		TokenTypeConvoy:    "#6C7086", // overlay0
+		TokenTypeAgent:     "#89B4FA", // blue
 
 		// BQL syntax highlighting
 		TokenBQLKeyword:  "#CBA6F7", // mauve
@@ -283,14 +287,16 @@ var CatppuccinLattePreset = Preset{
 		TokenPriorityBacklog:  "#9CA0B0", // overlay0
 
 		// Issue type
-		TokenTypeTask:     "#1E66F5", // blue
-		TokenTypeChore:    "#9CA0B0", // overlay0
-		TokenTypeEpic:     "#8839EF", // mauve
-		TokenTypeBug:      "#D20F39", // red
-		TokenTypeFeature:  "#40A02B", // green
-		TokenTypeMolecule: "#FE640B", // peach
-		TokenTypeConvoy:   "#9CA0B0", // overlay0
-		TokenTypeAgent:    "#1E66F5", // blue
+		TokenTypeTask:      "#1E66F5", // blue
+		TokenTypeChore:     "#9CA0B0", // overlay0
+		TokenTypeEpic:      "#8839EF", // mauve
+		TokenTypeBug:       "#D20F39", // red
+		TokenTypeFeature:   "#40A02B", // green
+		TokenTypeMilestone: "#DF8E1D", // yellow
+		TokenTypeStory:     "#179299", // teal
+		TokenTypeMolecule:  "#FE640B", // peach
+		TokenTypeConvoy:    "#9CA0B0", // overlay0
+		TokenTypeAgent:     "#1E66F5", // blue
 
 		// BQL syntax highlighting
 		TokenBQLKeyword:  "#8839EF", // mauve
@@ -381,14 +387,16 @@ var DraculaPreset = Preset{
 		TokenPriorityBacklog:  "#44475A", // current line
 
 		// Issue type
-		TokenTypeTask:     "#8BE9FD", // cyan
-		TokenTypeChore:    "#6272A4", // comment
-		TokenTypeEpic:     "#BD93F9", // purple
-		TokenTypeBug:      "#FF5555", // red
-		TokenTypeFeature:  "#50FA7B", // green
-		TokenTypeMolecule: "#FFB86C", // orange
-		TokenTypeConvoy:   "#6272A4", // comment
-		TokenTypeAgent:    "#BD93F9", // purple
+		TokenTypeTask:      "#8BE9FD", // cyan
+		TokenTypeChore:     "#6272A4", // comment
+		TokenTypeEpic:      "#BD93F9", // purple
+		TokenTypeBug:       "#FF5555", // red
+		TokenTypeFeature:   "#50FA7B", // green
+		TokenTypeMilestone: "#F1FA8C", // yellow
+		TokenTypeStory:     "#8BE9FD", // cyan
+		TokenTypeMolecule:  "#FFB86C", // orange
+		TokenTypeConvoy:    "#6272A4", // comment
+		TokenTypeAgent:     "#BD93F9", // purple
 
 		// BQL syntax highlighting
 		TokenBQLKeyword:  "#FF79C6", // pink
@@ -483,14 +491,16 @@ var NordPreset = Preset{
 		TokenPriorityBacklog:  "#434C5E", // polar night 3
 
 		// Issue type
-		TokenTypeTask:     "#88C0D0", // frost 2
-		TokenTypeChore:    "#4C566A", // polar night 4
-		TokenTypeEpic:     "#B48EAD", // aurora purple
-		TokenTypeBug:      "#BF616A", // aurora red
-		TokenTypeFeature:  "#A3BE8C", // aurora green
-		TokenTypeMolecule: "#D08770", // aurora orange
-		TokenTypeConvoy:   "#4C566A", // polar night 4
-		TokenTypeAgent:    "#81A1C1", // frost blue
+		TokenTypeTask:      "#88C0D0", // frost 2
+		TokenTypeChore:     "#4C566A", // polar night 4
+		TokenTypeEpic:      "#B48EAD", // aurora purple
+		TokenTypeBug:       "#BF616A", // aurora red
+		TokenTypeFeature:   "#A3BE8C", // aurora green
+		TokenTypeMilestone: "#EBCB8B", // aurora yellow
+		TokenTypeStory:     "#8FBCBB", // frost 1
+		TokenTypeMolecule:  "#D08770", // aurora orange
+		TokenTypeConvoy:    "#4C566A", // polar night 4
+		TokenTypeAgent:     "#81A1C1", // frost blue
 
 		// BQL syntax highlighting
 		TokenBQLKeyword:  "#81A1C1", // frost 3
@@ -582,14 +592,16 @@ var HighContrastPreset = Preset{
 		TokenPriorityBacklog:  "#808080", // gray
 
 		// Issue type - distinct colors
-		TokenTypeTask:     "#00FFFF", // cyan
-		TokenTypeChore:    "#808080", // gray
-		TokenTypeEpic:     "#FF00FF", // magenta
-		TokenTypeBug:      "#FF0000", // red
-		TokenTypeFeature:  "#00FF00", // green
-		TokenTypeMolecule: "#FFA500", // orange
-		TokenTypeConvoy:   "#808080", // gray
-		TokenTypeAgent:    "#00BFFF", // deep sky blue
+		TokenTypeTask:      "#00FFFF", // cyan
+		TokenTypeChore:     "#808080", // gray
+		TokenTypeEpic:      "#FF00FF", // magenta
+		TokenTypeBug:       "#FF0000", // red
+		TokenTypeFeature:   "#00FF00", // green
+		TokenTypeMilestone: "#FFFF00", // yellow
+		TokenTypeStory:     "#00FFFF", // cyan
+		TokenTypeMolecule:  "#FFA500", // orange
+		TokenTypeConvoy:    "#808080", // gray
+		TokenTypeAgent:     "#00BFFF", // deep sky blue
 
 		// BQL syntax highlighting - high contrast
 		TokenBQLKeyword:  "#FF00FF", // magenta
@@ -679,14 +691,16 @@ var GruvboxPreset = Preset{
 		TokenPriorityBacklog:  "#665C54", // bg3
 
 		// Issue type
-		TokenTypeTask:     "#83A598", // blue
-		TokenTypeChore:    "#928374", // gray
-		TokenTypeEpic:     "#D3869B", // purple
-		TokenTypeBug:      "#FB4934", // red
-		TokenTypeFeature:  "#B8BB26", // green
-		TokenTypeMolecule: "#FE8019", // orange
-		TokenTypeConvoy:   "#928374", // gray
-		TokenTypeAgent:    "#83A598", // blue bright
+		TokenTypeTask:      "#83A598", // blue
+		TokenTypeChore:     "#928374", // gray
+		TokenTypeEpic:      "#D3869B", // purple
+		TokenTypeBug:       "#FB4934", // red
+		TokenTypeFeature:   "#B8BB26", // green
+		TokenTypeMilestone: "#FABD2F", // yellow
+		TokenTypeStory:     "#8EC07C", // aqua
+		TokenTypeMolecule:  "#FE8019", // orange
+		TokenTypeConvoy:    "#928374", // gray
+		TokenTypeAgent:     "#83A598", // blue bright
 
 		// BQL syntax highlighting
 		TokenBQLKeyword:  "#FB4934", // red

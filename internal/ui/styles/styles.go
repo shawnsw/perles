@@ -122,23 +122,27 @@ var (
 	PriorityBacklogStyle  = lipgloss.NewStyle().Foreground(PriorityBacklogColor)
 
 	// Issue type colors
-	IssueTaskColor     = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
-	IssueChoreColor    = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
-	IssueEpicColor     = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	IssueBugColor      = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
-	IssueFeatureColor  = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
-	IssueMoleculeColor = lipgloss.AdaptiveColor{Light: "#FF731A", Dark: "#FF731A"}
-	IssueConvoyColor   = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"}
-	IssueAgentColor    = lipgloss.AdaptiveColor{Light: "#5C6BC0", Dark: "#5C6BC0"}
+	IssueTaskColor      = lipgloss.AdaptiveColor{Light: "#54A0FF", Dark: "#54A0FF"}
+	IssueChoreColor     = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#777777"}
+	IssueEpicColor      = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	IssueBugColor       = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	IssueFeatureColor   = lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"}
+	IssueMilestoneColor = lipgloss.AdaptiveColor{Light: "#E8A838", Dark: "#F0B84A"}
+	IssueStoryColor     = lipgloss.AdaptiveColor{Light: "#2DD4BF", Dark: "#2DD4BF"}
+	IssueMoleculeColor  = lipgloss.AdaptiveColor{Light: "#FF731A", Dark: "#FF731A"}
+	IssueConvoyColor    = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"}
+	IssueAgentColor     = lipgloss.AdaptiveColor{Light: "#5C6BC0", Dark: "#5C6BC0"}
 
-	TypeBugStyle      = lipgloss.NewStyle().Foreground(StatusErrorColor)
-	TypeFeatureStyle  = lipgloss.NewStyle().Foreground(IssueFeatureColor)
-	TypeTaskStyle     = lipgloss.NewStyle().Foreground(IssueTaskColor)
-	TypeEpicStyle     = lipgloss.NewStyle().Foreground(IssueEpicColor)
-	TypeChoreStyle    = lipgloss.NewStyle().Foreground(IssueChoreColor)
-	TypeMoleculeStyle = lipgloss.NewStyle().Foreground(IssueMoleculeColor)
-	TypeConvoyStyle   = lipgloss.NewStyle().Foreground(IssueConvoyColor)
-	TypeAgentStyle    = lipgloss.NewStyle().Foreground(IssueAgentColor)
+	TypeBugStyle       = lipgloss.NewStyle().Foreground(StatusErrorColor)
+	TypeFeatureStyle   = lipgloss.NewStyle().Foreground(IssueFeatureColor)
+	TypeTaskStyle      = lipgloss.NewStyle().Foreground(IssueTaskColor)
+	TypeEpicStyle      = lipgloss.NewStyle().Foreground(IssueEpicColor)
+	TypeChoreStyle     = lipgloss.NewStyle().Foreground(IssueChoreColor)
+	TypeMilestoneStyle = lipgloss.NewStyle().Foreground(IssueMilestoneColor)
+	TypeStoryStyle     = lipgloss.NewStyle().Foreground(IssueStoryColor)
+	TypeMoleculeStyle  = lipgloss.NewStyle().Foreground(IssueMoleculeColor)
+	TypeConvoyStyle    = lipgloss.NewStyle().Foreground(IssueConvoyColor)
+	TypeAgentStyle     = lipgloss.NewStyle().Foreground(IssueAgentColor)
 
 	// Status bar
 	StatusBarStyle = lipgloss.NewStyle().
@@ -184,8 +188,12 @@ func GetTypeIndicator(t task.IssueType) string {
 		return "[E]"
 	case task.TypeChore:
 		return "[C]"
-	case task.IssueType("molecule"):
+	case task.TypeMilestone:
 		return "[M]"
+	case task.TypeStory:
+		return "[S]"
+	case task.IssueType("molecule"):
+		return "[Mo]"
 	case task.IssueType("convoy"):
 		return "[🚚]"
 	case task.IssueType("agent"):
@@ -208,6 +216,10 @@ func GetTypeStyle(t task.IssueType) lipgloss.Style {
 		return TypeEpicStyle
 	case task.TypeChore:
 		return TypeChoreStyle
+	case task.TypeMilestone:
+		return TypeMilestoneStyle
+	case task.TypeStory:
+		return TypeStoryStyle
 	case task.IssueType("molecule"):
 		return TypeMoleculeStyle
 	case task.IssueType("convoy"):

@@ -49,7 +49,7 @@ type = epic expand down depth *
 | Field | Description | Example Values |
 |-------|-------------|----------------|
 | `status` | Issue status | `open`, `in_progress`, `closed` |
-| `type` | Issue type | `bug`, `feature`, `task`, `epic`, `chore` |
+| `type` | Issue type | `bug`, `feature`, `task`, `epic`, `chore`, `milestone`, `story` |
 | `priority` | Priority level | `P0`, `P1`, `P2`, `P3`, `P4` |
 | `blocked` | Has blockers | `true`, `false` |
 | `ready` | Ready to work | `true`, `false` |
