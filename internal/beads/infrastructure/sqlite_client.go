@@ -66,12 +66,19 @@ func (c *SQLiteClient) Dialect() appbeads.SQLDialect {
 	return appbeads.DialectSQLite
 }
 
-// Version returns the beads version from the database metadata table.
+// Version returns the beads version from the database.
+// It first tries local_metadata (new location), then falls back to metadata (legacy).
 func (c *SQLiteClient) Version() (string, error) {
 	var version string
-	err := c.db.QueryRowContext(context.Background(), "SELECT value FROM metadata WHERE key = 'bd_version'").Scan(&version)
+
+	err := c.db.QueryRowContext(context.Background(), "SELECT value FROM local_metadata WHERE key = 'bd_version'").Scan(&version)
+	if err == nil {
+		return version, nil
+	}
+
+	err = c.db.QueryRowContext(context.Background(), "SELECT value FROM metadata WHERE key = 'bd_version'").Scan(&version)
 	if err != nil {
-		return "", fmt.Errorf("reading bd_version from metadata: %w", err)
+		return "", fmt.Errorf("reading bd_version: %w", err)
 	}
 	return version, nil
 }
