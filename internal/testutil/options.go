@@ -35,6 +35,7 @@ type issueData struct {
 	closeReason string
 	deletedAt   *time.Time
 	molType     string
+	metadata    string
 }
 
 // defaultIssue returns an issueData with sensible defaults.
@@ -153,4 +154,9 @@ func IsTemplate(t bool) IssueOption {
 // MolType sets the mol_type field for the issue.
 func MolType(s string) IssueOption {
 	return func(i *issueData) { i.molType = s }
+}
+
+// Metadata sets the metadata JSON field for the issue.
+func Metadata(m string) IssueOption {
+	return func(i *issueData) { i.metadata = m }
 }

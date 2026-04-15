@@ -72,6 +72,7 @@ const (
 	ValueBool
 	ValuePriority // P0, P1, P2, P3, P4
 	ValueDate     // today, yesterday, -7d, ISO dates
+	ValueNull     // nil (for metadata existence checks)
 )
 
 // Value represents a literal value in a query.

@@ -36,6 +36,7 @@ CREATE TABLE issues (
 	close_reason TEXT DEFAULT '',
 	deleted_at DATETIME,
 	mol_type TEXT DEFAULT '',
+	metadata TEXT DEFAULT '{}',
 	CHECK ((status = 'closed') = (closed_at IS NOT NULL) OR status IN ('deleted', 'tombstone'))
 );
 
@@ -68,6 +69,11 @@ CREATE TABLE blocked_issues_cache (
 	issue_id TEXT PRIMARY KEY
 );
 
+CREATE TABLE local_metadata (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+
 CREATE VIEW ready_issues AS
 SELECT i.id
 FROM issues i
@@ -82,6 +88,8 @@ func NewTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	_, err = db.ExecContext(context.Background(), Schema)
+	require.NoError(t, err)
+	_, err = db.ExecContext(context.Background(), "INSERT INTO local_metadata (key, value) VALUES ('bd_version', '1.0.0')")
 	require.NoError(t, err)
 	return db
 }

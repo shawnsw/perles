@@ -526,7 +526,7 @@ orchestration:
 
 `id`, `type`, `status`, `priority`, `title`, `description`, `design`, `notes`,
 `created`, `updated`, `blocked`, `ready`, `pinned`, `is_template`, `label`,
-`assignee`, `sender`, `created_by`, `mol_type`
+`assignee`, `sender`, `created_by`, `mol_type`, `metadata.$key`
 
 ### Operators
 
@@ -541,11 +541,14 @@ orchestration:
 - **Priorities:** `P0`, `P1`, `P2`, `P3`, `P4`
 - **Booleans:** `true`, `false`
 - **Dates:** `today`, `yesterday`, `-7d`, `-30d`
+- **Null:** `nil` (for metadata existence checks)
 
 ### Special Clauses
 
 - **EXPAND:** `expand up|down|all [depth N|*]` - traverse relationships
 - **ORDER BY:** `order by field [asc|desc]` - sort results
+- **Metadata:** `metadata.$key = "value"` - filter by issue metadata
+- **Metadata exists:** `metadata.$key != nil` - key exists, `metadata.$key = nil` - key does not exist
 
 ### Example Queries
 
@@ -555,6 +558,9 @@ status != closed and ready = true
 title ~ "auth" and label in (security, urgent)
 created > -7d order by priority asc
 type = epic expand down depth 2
+metadata.team = "backend"
+metadata.sprint = nil
+type = task and metadata.component ~ auth
 ```
 
 ## Configuration

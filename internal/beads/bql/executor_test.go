@@ -3074,3 +3074,86 @@ func TestBatchLoading_IntegrationFullQueryEquivalence(t *testing.T) {
 	require.Equal(t, "test-2", issue.ID)
 	require.Equal(t, "test-6", issue.ParentID)
 }
+
+func TestExecutor_MetadataQueries(t *testing.T) {
+	db := setupDB(t, func(b *testutil.Builder) *testutil.Builder {
+		return b.
+			WithIssue("meta-1", testutil.IssueType("task"), testutil.Metadata(`{"team":"backend","component":"api","effort":"high"}`)).
+			WithIssue("meta-2", testutil.IssueType("task"), testutil.Metadata(`{"team":"frontend","component":"ui"}`)).
+			WithIssue("meta-3", testutil.IssueType("bug"), testutil.Metadata(`{"team":"backend","severity":"critical"}`)).
+			WithIssue("meta-4", testutil.IssueType("task"), testutil.Metadata(`{}`)).
+			WithIssue("meta-5", testutil.IssueType("task"), testutil.Metadata(`{"team":"backend"}`)).
+			WithIssue("meta-6", testutil.IssueType("task"), testutil.Metadata(`{"jira":{"sprint":"Q1-2026","priority":"high"}}`))
+	})
+	defer func() { _ = db.Close() }()
+
+	executor := newTestExecutor(t, db)
+
+	t.Run("metadata key exists", func(t *testing.T) {
+		issues, err := executor.Execute(`metadata.team != nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 4, "should find 4 issues with team metadata")
+
+		ids := make(map[string]bool)
+		for _, i := range issues {
+			ids[i.ID] = true
+		}
+		require.True(t, ids["meta-1"])
+		require.True(t, ids["meta-2"])
+		require.True(t, ids["meta-3"])
+		require.True(t, ids["meta-5"])
+		require.False(t, ids["meta-4"], "should NOT include meta-4 (empty metadata)")
+		require.False(t, ids["meta-6"], "should NOT include meta-6 (has jira, not team)")
+	})
+
+	t.Run("metadata key does not exist", func(t *testing.T) {
+		issues, err := executor.Execute(`metadata.team = nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 2, "should find 2 issues without team metadata")
+
+		ids := make(map[string]bool)
+		for _, i := range issues {
+			ids[i.ID] = true
+		}
+		require.True(t, ids["meta-4"], "should include meta-4 (empty metadata)")
+		require.True(t, ids["meta-6"], "should include meta-6 (has jira, not team)")
+	})
+
+	t.Run("nested metadata key exists", func(t *testing.T) {
+		issues, err := executor.Execute(`metadata.jira.priority != nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 1, "should find meta-6 with nested jira.priority")
+		require.Equal(t, "meta-6", issues[0].ID)
+	})
+
+	t.Run("combined with type filter", func(t *testing.T) {
+		issues, err := executor.Execute(`type = bug and metadata.team != nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 1, "should find meta-3 (bug with team)")
+		require.Equal(t, "meta-3", issues[0].ID)
+	})
+
+	t.Run("effort field exists", func(t *testing.T) {
+		issues, err := executor.Execute(`metadata.effort != nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 1, "should find only meta-1 (has effort=high)")
+		require.Equal(t, "meta-1", issues[0].ID)
+	})
+
+	t.Run("effort field not exists", func(t *testing.T) {
+		issues, err := executor.Execute(`metadata.effort = nil`)
+		require.NoError(t, err)
+		require.Len(t, issues, 5, "should find 5 issues without effort")
+
+		ids := make(map[string]bool)
+		for _, i := range issues {
+			ids[i.ID] = true
+		}
+		require.True(t, ids["meta-2"])
+		require.True(t, ids["meta-3"])
+		require.True(t, ids["meta-4"])
+		require.True(t, ids["meta-5"])
+		require.True(t, ids["meta-6"])
+		require.False(t, ids["meta-1"], "should NOT include meta-1 (has effort)")
+	})
+}

@@ -327,6 +327,8 @@ func TestLexer_AllKeywords(t *testing.T) {
 		"TRUE":   TokenTrue,
 		"false":  TokenFalse,
 		"FALSE":  TokenFalse,
+		"nil":    TokenNull,
+		"NIL":    TokenNull,
 		"expand": TokenExpand,
 		"EXPAND": TokenExpand,
 		"Expand": TokenExpand,
@@ -403,6 +405,8 @@ func TestLexer_ExtendedIdentifierChars(t *testing.T) {
 		{"plus - compound", "C++", "C++"},
 		{"semver with prerelease", "v1.0.0-beta+build", "v1.0.0-beta+build"},
 		{"all special chars", "a_b-c:d.e/f@g#h+i", "a_b-c:d.e/f@g#h+i"},
+		{"metadata field", "metadata.team", "metadata.team"},
+		{"nested metadata", "metadata.jira.sprint", "metadata.jira.sprint"},
 	}
 
 	for _, tt := range tests {

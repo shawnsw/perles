@@ -76,6 +76,9 @@ func BQLExamples() []string {
 		"type = epic expand down",
 		"type = epic expand down depth *",
 		"id = x expand up",
+		`metadata.team = "backend"`,
+		"metadata.component != nil",
+		`type = task and metadata.team = "backend"`,
 	}
 }
 

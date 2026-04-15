@@ -68,6 +68,56 @@ type = epic expand down depth *
 | `created` | Creation date | `today`, `yesterday`, `-7d`, `-3m` |
 | `updated` | Last update | `today`, `-24h` |
 
+### Metadata Fields
+
+Issues can have custom metadata stored as JSON key-value pairs. Use the `metadata.<key>` syntax to filter by metadata:
+
+| Field | Description | Example Values |
+|-------|-------------|----------------|
+| `metadata.<key>` | Custom metadata field | any string value |
+
+#### Metadata Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `=` | Equals metadata value | `metadata.team = "backend"` |
+| `!=` | Not equals metadata value | `metadata.team != "frontend"` |
+| `~` | Contains pattern | `metadata.component ~ auth` |
+| `!~` | Not contains pattern | `metadata.team !~ infra` |
+| `= nil` | Key does not exist | `metadata.team = nil` |
+| `!= nil` | Key exists | `metadata.team != nil` |
+
+#### Metadata Examples
+
+```bql
+# Filter by metadata value
+metadata.team = "backend"
+
+# Combined with other filters
+type = task and metadata.team = "backend"
+
+# Find issues WITHOUT a specific key
+metadata.sprint = nil
+
+# Find issues WITH a specific key
+metadata.component != nil
+
+# Pattern matching in metadata values
+metadata.component ~ auth
+
+# Multiple conditions
+type = bug and metadata.severity = "critical" or metadata.team = "security"
+```
+
+#### Nested Metadata
+
+Metadata keys can contain dots for namespacing:
+
+```bql
+metadata.jira.sprint = "Q1-2026"
+metadata.jira.priority = "high"
+```
+
 ---
 
 ## Operators

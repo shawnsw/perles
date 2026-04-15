@@ -592,3 +592,101 @@ func TestSQLBuilder_MySQLDialect_ReadyField(t *testing.T) {
 	require.Contains(t, mysqlWhere, "ri.status = 'open'")
 	require.Contains(t, mysqlWhere, "NOT IN (SELECT bi.id FROM issues bi")
 }
+
+func TestSQLBuilder_MetadataField(t *testing.T) {
+	t.Run("metadata equals string", func(t *testing.T) {
+		parser := NewParser(`metadata.team = "backend"`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) = ?", where)
+		require.Equal(t, []interface{}{"$.team", "backend"}, params)
+	})
+
+	t.Run("metadata not equals string", func(t *testing.T) {
+		parser := NewParser(`metadata.team != "backend"`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) != ?", where)
+		require.Equal(t, []interface{}{"$.team", "backend"}, params)
+	})
+
+	t.Run("metadata contains pattern", func(t *testing.T) {
+		parser := NewParser(`metadata.team ~ auth`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) LIKE ?", where)
+		require.Equal(t, []interface{}{"$.team", "%auth%"}, params)
+	})
+
+	t.Run("metadata not contains pattern", func(t *testing.T) {
+		parser := NewParser(`metadata.team !~ legacy`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) NOT LIKE ?", where)
+		require.Equal(t, []interface{}{"$.team", "%legacy%"}, params)
+	})
+
+	t.Run("metadata key exists", func(t *testing.T) {
+		parser := NewParser("metadata.team != nil")
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_EXTRACT(i.metadata, ?) IS NOT NULL", where)
+		require.Equal(t, []interface{}{"$.team"}, params)
+	})
+
+	t.Run("metadata key not exists", func(t *testing.T) {
+		parser := NewParser("metadata.team = nil")
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_EXTRACT(i.metadata, ?) IS NULL", where)
+		require.Equal(t, []interface{}{"$.team"}, params)
+	})
+
+	t.Run("metadata with nested key", func(t *testing.T) {
+		parser := NewParser(`metadata.jira.sprint = "Q1-2026"`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) = ?", where)
+		require.Equal(t, []interface{}{"$.jira.sprint", "Q1-2026"}, params)
+	})
+
+	t.Run("metadata combined with other filters", func(t *testing.T) {
+		parser := NewParser(`type = task and metadata.team = "backend"`)
+		query, err := parser.Parse()
+		require.NoError(t, err)
+
+		builder := NewSQLBuilder(query, appbeads.DialectSQLite)
+		where, _, params := builder.Build()
+
+		require.Equal(t, "(i.issue_type = ? AND JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?)) = ?)", where)
+		require.Equal(t, []interface{}{"task", "$.team", "backend"}, params)
+	})
+}

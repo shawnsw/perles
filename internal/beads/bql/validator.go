@@ -2,8 +2,26 @@ package bql
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var validMetadataKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.]*$`)
+
+func isMetadataField(field string) (bool, string) {
+	if !strings.HasPrefix(field, "metadata.") {
+		return false, ""
+	}
+	key := strings.TrimPrefix(field, "metadata.")
+	return true, key
+}
+
+func validateMetadataKey(key string) error {
+	if !validMetadataKeyRe.MatchString(key) {
+		return fmt.Errorf("invalid metadata key %q: must match [a-zA-Z_][a-zA-Z0-9_.]*", key)
+	}
+	return nil
+}
 
 // ValidFields defines the set of valid field names in BQL.
 var ValidFields = map[string]FieldType{
@@ -108,6 +126,19 @@ func validateExpr(expr Expr, validFields map[string]FieldType) error {
 
 // validateCompare validates a comparison expression.
 func validateCompare(e *CompareExpr, validFields map[string]FieldType) error {
+	if isMeta, key := isMetadataField(e.Field); isMeta {
+		if err := validateMetadataKey(key); err != nil {
+			return err
+		}
+		if e.Op == TokenEq || e.Op == TokenNeq || e.Op == TokenContains || e.Op == TokenNotContains {
+			if err := validateValue(e.Field, FieldString, e.Value); err != nil {
+				return err
+			}
+			return nil
+		}
+		return fmt.Errorf("operator %q is not valid for metadata field %q (use =, !=, ~, or !~)", e.Op, e.Field)
+	}
+
 	// Check field exists
 	fieldType, ok := validFields[e.Field]
 	if !ok {
@@ -183,6 +214,13 @@ func validateOperator(field string, fieldType FieldType, op TokenType) error {
 
 // validateValue checks if a value is valid for a field type.
 func validateValue(field string, fieldType FieldType, value Value) error {
+	if isMeta, _ := isMetadataField(field); isMeta {
+		if value.Type == ValueNull || value.Type == ValueString {
+			return nil
+		}
+		return fmt.Errorf("metadata field %q requires a string or nil value, got %q", field, value.Raw)
+	}
+
 	switch fieldType {
 	case FieldBool:
 		if value.Type != ValueBool {

@@ -247,6 +247,8 @@ func (p *Parser) parseValue() (Value, error) {
 		v = Value{Type: ValueBool, Raw: p.current.Literal, Bool: true}
 	case TokenFalse:
 		v = Value{Type: ValueBool, Raw: p.current.Literal, Bool: false}
+	case TokenNull:
+		v = Value{Type: ValueNull, Raw: p.current.Literal}
 	case TokenIdent:
 		v = parseIdentValue(p.current.Literal)
 	default:

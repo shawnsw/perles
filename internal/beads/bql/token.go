@@ -48,6 +48,9 @@ const (
 	TokenTrue  // true
 	TokenFalse // false
 
+	// Null literal
+	TokenNull // nil (for metadata key existence checks)
+
 	// Expand clause
 	TokenExpand // expand
 	TokenDepth  // depth
@@ -109,6 +112,8 @@ func (t TokenType) String() string {
 		return "TRUE"
 	case TokenFalse:
 		return "FALSE"
+	case TokenNull:
+		return "NULL"
 	case TokenExpand:
 		return "EXPAND"
 	case TokenDepth:
@@ -139,6 +144,7 @@ var keywords = map[string]TokenType{
 	"desc":   TokenDesc,
 	"true":   TokenTrue,
 	"false":  TokenFalse,
+	"nil":    TokenNull,
 	"expand": TokenExpand,
 	"depth":  TokenDepth,
 }

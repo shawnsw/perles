@@ -7,6 +7,10 @@ import (
 	appbeads "github.com/zjrosen/perles/internal/beads/application"
 )
 
+func jsonMetadataPath(key string) string {
+	return "$." + key
+}
+
 // SQLBuilder converts a BQL AST to SQL.
 type SQLBuilder struct {
 	query      *Query
@@ -114,6 +118,31 @@ func (b *SQLBuilder) buildCompare(e *CompareExpr) string {
 		default: // TokenEq
 			b.params = append(b.params, e.Value.String)
 			return "i.id IN (SELECT issue_id FROM labels WHERE label = ?)"
+		}
+	}
+
+	if key, ok := strings.CutPrefix(e.Field, "metadata."); ok {
+		path := jsonMetadataPath(key)
+
+		if e.Value.Type == ValueNull {
+			b.params = append(b.params, path)
+			if e.Op == TokenEq {
+				return "JSON_EXTRACT(i.metadata, ?) IS NULL"
+			}
+			return "JSON_EXTRACT(i.metadata, ?) IS NOT NULL"
+		}
+
+		extracted := "JSON_UNQUOTE(JSON_EXTRACT(i.metadata, ?))"
+		switch e.Op {
+		case TokenContains:
+			b.params = append(b.params, path, "%"+e.Value.String+"%")
+			return fmt.Sprintf("%s LIKE ?", extracted)
+		case TokenNotContains:
+			b.params = append(b.params, path, "%"+e.Value.String+"%")
+			return fmt.Sprintf("%s NOT LIKE ?", extracted)
+		default:
+			b.params = append(b.params, path, e.Value.String)
+			return fmt.Sprintf("%s %s ?", extracted, b.opToSQL(e.Op))
 		}
 	}
 

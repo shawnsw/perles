@@ -193,3 +193,88 @@ func TestValidate_NotExprWithInvalidChild(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown field")
 }
+
+func TestValidate_MetadataField(t *testing.T) {
+	t.Run("valid metadata equals", func(t *testing.T) {
+		parser := NewParser(`metadata.team = "backend"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid metadata not equals", func(t *testing.T) {
+		parser := NewParser(`metadata.team != "backend"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid metadata contains", func(t *testing.T) {
+		parser := NewParser(`metadata.team ~ auth`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid metadata key exists", func(t *testing.T) {
+		parser := NewParser("metadata.team = nil")
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid metadata key not exists", func(t *testing.T) {
+		parser := NewParser("metadata.team != nil")
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid nested metadata key", func(t *testing.T) {
+		parser := NewParser(`metadata.jira.sprint = "Q1"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid metadata combined with other fields", func(t *testing.T) {
+		parser := NewParser(`type = task and metadata.team = "backend"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid metadata operator", func(t *testing.T) {
+		parser := NewParser(`metadata.team < "value"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not valid for metadata field")
+	})
+
+	t.Run("invalid metadata value type", func(t *testing.T) {
+		parser := NewParser("metadata.team = 123")
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires a string or nil value")
+	})
+
+	t.Run("invalid metadata key name", func(t *testing.T) {
+		parser := NewParser(`metadata.123-invalid = "value"`)
+		q, err := parser.Parse()
+		require.NoError(t, err)
+		err = Validate(q)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid metadata key")
+	})
+}

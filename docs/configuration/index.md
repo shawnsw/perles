@@ -150,6 +150,21 @@ views:
         query: "type = bug and status = closed"
         color: "#10B981"
 
+  - name: By Team
+    columns:
+      - name: Backend Team
+        type: bql
+        query: 'status = open and metadata.team = "backend"'
+        color: "#73F59F"
+      - name: Frontend Team
+        type: bql
+        query: 'status = open and metadata.team = "frontend"'
+        color: "#54A0FF"
+      - name: Unassigned
+        type: bql
+        query: 'status = open and metadata.team = nil'
+        color: "#BBBBBB"
+
   - name: Work
     columns:
       - name: Current

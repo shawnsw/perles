@@ -73,19 +73,22 @@ Note: --parent only creates hierarchy, NOT execution dependencies. Use bd dep ad
 ## BQL Quick Reference
 BQL filters issues in Perles search. Key syntax:
 
-Fields: id, type, status, priority, title, body, created, updated, parent_id, blocked, blocks, ready, label, assignee
+Fields: id, type, status, priority, title, body, created, updated, parent_id, blocked, blocks, ready, label, assignee, metadata.$key
 
 Operators:
 - Comparison: =, !=, <, >, <=, >=
 - String: ~ (contains), !~ (not contains)
 - Logical: and, or, not
 - Set: in (values), not in (values)
+- Null: = nil (key not exists), != nil (key exists)
 
 Examples:
 - type = bug and priority = P0
 - status != closed and ready = true
 - title ~ "auth" and label in (security, urgent)
 - created > -7d order by priority asc
+- metadata.team = "backend"
+- metadata.component != nil
 
 ## Guidelines
 - Keep responses concise for terminal readability
