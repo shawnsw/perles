@@ -37,6 +37,7 @@ export interface FabricEvent {
     type: string;
     timestamp: string;
     channel_id?: string;
+    channel_slug?: string;
     parent_id?: string;
     agent_id?: string;
     thread?: {

@@ -43,7 +43,7 @@ const (
 
 // Comment represents a comment on an issue.
 type Comment struct {
-	ID        int       `json:"id"`
+	ID        string    `json:"id"`
 	Author    string    `json:"author"`
 	Text      string    `json:"text"`
 	CreatedAt time.Time `json:"created_at"`

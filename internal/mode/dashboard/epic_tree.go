@@ -11,6 +11,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/tree"
@@ -301,6 +302,16 @@ func (m Model) handleEpicTreeKeysFocusDetails(msg tea.KeyMsg) (mode.Controller, 
 				m.issueEditor = &editor
 				return m, m.issueEditor.Init()
 			}
+		}
+		return m, nil
+	}
+
+	if key.Matches(msg, keys.Component.CommentAction) {
+		if m.hasEpicDetail {
+			issue := m.epicDetails.Issue()
+			editor := commenteditor.NewWithVimMode(issue, m.vimMode).SetSize(m.width, m.height)
+			m.commentEditor = &editor
+			return m, m.commentEditor.Init()
 		}
 		return m, nil
 	}

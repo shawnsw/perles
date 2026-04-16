@@ -41,6 +41,9 @@ type BoardColumn interface {
 	// Width returns the column's width for rendering.
 	Width() int
 
+	// Height returns the column's height for rendering.
+	Height() int
+
 	// LoadCmd returns a tea.Cmd that loads data asynchronously.
 	// viewIndex identifies which view, columnIndex identifies which column within that view.
 	LoadCmd(viewIndex, columnIndex int) tea.Cmd
@@ -476,6 +479,12 @@ func (c Column) Color() lipgloss.TerminalColor {
 // Implements BoardColumn interface.
 func (c Column) Width() int {
 	return c.width
+}
+
+// Height returns the column's height for rendering.
+// Implements BoardColumn interface.
+func (c Column) Height() int {
+	return c.height
 }
 
 // SetClock sets the clock for timestamp formatting. The board column does not

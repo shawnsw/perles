@@ -11,6 +11,7 @@ import './FabricPanel.css'
 interface Props {
   events: FabricEvent[]
   workflowId?: string
+  sessionPath?: string
 }
 
 interface Channel {
@@ -38,6 +39,7 @@ interface Message {
 interface Thread {
   parentMessage: Message
   replies: Message[]
+  isOrphaned?: boolean
 }
 
 interface Artifact {
@@ -77,7 +79,28 @@ function getInitialChannelId(): string | null {
   return params.get('channel')
 }
 
-export default function FabricPanel({ events, workflowId }: Props) {
+function channelTitleForSlug(slug: string): string {
+  const titles: Record<string, string> = {
+    root: 'Root',
+    system: 'System',
+    tasks: 'Tasks',
+    planning: 'Planning',
+    general: 'General',
+    observer: 'Observer',
+  }
+
+  if (titles[slug]) {
+    return titles[slug]
+  }
+
+  return slug
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+export default function FabricPanel({ events, workflowId, sessionPath }: Props) {
   const [selectedChannelId, setSelectedChannelIdState] = useState<string | null>(getInitialChannelId)
   const [selectedThread, setSelectedThread] = useState<Thread | null>(null)
   const [sidebarTab, setSidebarTabState] = useState<'events' | 'messages'>(getInitialSidebarTab)
@@ -85,12 +108,19 @@ export default function FabricPanel({ events, workflowId }: Props) {
   // agents is fetched here for use by MentionAutocomplete
   const [agents, setAgents] = useState<Agent[]>([])
   const [isWorkflowActive, setIsWorkflowActive] = useState(false)
+  const [canCompose, setCanCompose] = useState(Boolean(sessionPath))
   // Toast state for error/success notifications
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null)
   // Artifacts view state
   const [showArtifacts, setShowArtifacts] = useState(false)
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null)
   const [artifactContent, setArtifactContent] = useState<string | null>(null)
+
+  const openThread = useCallback((thread: Thread) => {
+    setSelectedThread(thread)
+    setShowArtifacts(false)
+    setSelectedArtifact(null)
+  }, [])
 
   const setSidebarTab = (tab: 'events' | 'messages') => {
     setSidebarTabState(tab)
@@ -117,24 +147,56 @@ export default function FabricPanel({ events, workflowId }: Props) {
     const artifactList: Artifact[] = []
     const reactionList: Reaction[] = []
 
+    const ensureChannel = (
+      channelId?: string,
+      channelSlug?: string,
+      seed?: Partial<Channel>
+    ) => {
+      if (!channelId || !channelSlug) {
+        return
+      }
+
+      const existing = channelMap.get(channelId)
+      const fallback: Channel = {
+        id: channelId,
+        slug: channelSlug,
+        title: channelTitleForSlug(channelSlug),
+        purpose: '',
+        createdAt: seed?.createdAt || new Date().toISOString(),
+        messageCount: 0,
+      }
+
+      channelMap.set(channelId, {
+        ...fallback,
+        ...existing,
+        ...seed,
+        id: channelId,
+        slug: channelSlug,
+      })
+    }
+
     for (const event of events) {
       const e = event.event
       
       if (e.type === 'channel.created' && e.thread) {
-        channelMap.set(e.channel_id!, {
-          id: e.channel_id!,
-          slug: e.thread.slug || 'unknown',
-          title: e.thread.title || 'Untitled',
+        const slug = e.channel_slug || e.thread.slug || 'unknown'
+        ensureChannel(e.channel_id, slug, {
+          title: e.thread.title || channelTitleForSlug(slug),
           purpose: e.thread.purpose || '',
           createdAt: e.thread.created_at || event.timestamp,
-          messageCount: 0,
         })
       }
       
       if ((e.type === 'message.posted' || e.type === 'reply.posted') && e.thread) {
+        const channelId = e.channel_id || ''
+        const channelSlug = e.channel_slug || channelMap.get(channelId)?.slug || 'unknown'
+        ensureChannel(channelId, channelSlug, {
+          createdAt: e.thread.created_at || event.timestamp,
+        })
+
         const msg: Message = {
           id: e.thread.id,
-          channelId: e.channel_id!,
+          channelId,
           parentId: e.parent_id,
           createdBy: e.thread.created_by || 'unknown',
           content: e.thread.content || '',
@@ -145,14 +207,13 @@ export default function FabricPanel({ events, workflowId }: Props) {
           seq: e.thread.seq,
         }
         messageList.push(msg)
-        
-        const channel = channelMap.get(e.channel_id!)
-        if (channel) {
-          channel.messageCount++
-        }
       }
 
       if (e.type === 'artifact.added' && e.thread && e.channel_id) {
+        const channelSlug = e.channel_slug || channelMap.get(e.channel_id)?.slug || 'unknown'
+        ensureChannel(e.channel_id, channelSlug, {
+          createdAt: e.thread.created_at || event.timestamp,
+        })
         artifactList.push({
           id: e.thread.id,
           channelId: e.channel_id,
@@ -183,6 +244,19 @@ export default function FabricPanel({ events, workflowId }: Props) {
         if (idx !== -1) {
           reactionList.splice(idx, 1)
         }
+      }
+    }
+
+    const messageCounts = new Map<string, number>()
+    for (const msg of messageList) {
+      if (!msg.channelId) continue
+      messageCounts.set(msg.channelId, (messageCounts.get(msg.channelId) || 0) + 1)
+    }
+
+    for (const [channelId, count] of messageCounts.entries()) {
+      const channel = channelMap.get(channelId)
+      if (channel) {
+        channel.messageCount = count
       }
     }
 
@@ -249,17 +323,25 @@ export default function FabricPanel({ events, workflowId }: Props) {
     const channelMessages = messages
       .filter(m => getRootChannelId(m) === selectedChannelId)
       .sort((a, b) => a.seq - b.seq)
-    
+
     // Group replies by their direct parent_id
     const repliesByParent = new Map<string, Message[]>()
     const parentMessages: Message[] = []
-    
+    const orphanReplies: Message[] = []
+
     for (const msg of channelMessages) {
       if (msg.type === 'reply' && msg.parentId) {
-        // This is a reply with a parent
-        const replies = repliesByParent.get(msg.parentId) || []
-        replies.push(msg)
-        repliesByParent.set(msg.parentId, replies)
+        const parent = allMessageMap.get(msg.parentId)
+        if (parent) {
+          // This is a reply with a known parent
+          const replies = repliesByParent.get(msg.parentId) || []
+          replies.push(msg)
+          repliesByParent.set(msg.parentId, replies)
+        } else {
+          // Sessions can contain replies without the original parent message.
+          // Render them as standalone threads instead of dropping them silently.
+          orphanReplies.push(msg)
+        }
       } else {
         // This is a parent message (or a reply without parent_id, treat as parent)
         parentMessages.push(msg)
@@ -280,10 +362,19 @@ export default function FabricPanel({ events, workflowId }: Props) {
     // Build threads from parent messages with all nested replies flattened
     const threadList: Thread[] = parentMessages.map(parent => ({
       parentMessage: parent,
-      replies: collectAllReplies(parent.id).sort((a, b) => a.seq - b.seq)
+      replies: collectAllReplies(parent.id).sort((a, b) => a.seq - b.seq),
+      isOrphaned: false,
     }))
-    
-    return threadList
+
+    const orphanThreadList: Thread[] = orphanReplies.map(reply => ({
+      parentMessage: reply,
+      replies: collectAllReplies(reply.id).sort((a, b) => a.seq - b.seq),
+      isOrphaned: true,
+    }))
+
+    return [...threadList, ...orphanThreadList].sort(
+      (a, b) => a.parentMessage.seq - b.parentMessage.seq
+    )
   }, [messages, selectedChannelId])
 
   const selectedChannel = channels.find(c => c.id === selectedChannelId)
@@ -330,10 +421,18 @@ export default function FabricPanel({ events, workflowId }: Props) {
     }
   }, [threads])
 
-  // Fetch agents when workflowId changes
+  // Fetch agents when the live workflow or archived session changes
   useEffect(() => {
-    if (workflowId) {
-      fetch(`/api/fabric/agents?workflowId=${encodeURIComponent(workflowId)}`)
+    if (workflowId || sessionPath) {
+      const params = new URLSearchParams()
+      if (workflowId) {
+        params.set('workflowId', workflowId)
+      }
+      if (sessionPath) {
+        params.set('sessionPath', sessionPath)
+      }
+
+      fetch(`/api/fabric/agents?${params.toString()}`)
         .then(res => {
           if (!res.ok) throw new Error('Failed to fetch agents')
           return res.json()
@@ -341,21 +440,24 @@ export default function FabricPanel({ events, workflowId }: Props) {
         .then((data: AgentsResponse) => {
           setAgents(data.agents || [])
           setIsWorkflowActive(data.isActive)
+          setCanCompose(data.isActive || Boolean(sessionPath))
         })
         .catch(() => {
           setAgents([])
           setIsWorkflowActive(false)
+          setCanCompose(false)
         })
     } else {
       setAgents([])
       setIsWorkflowActive(false)
+      setCanCompose(false)
     }
-  }, [workflowId])
+  }, [workflowId, sessionPath])
 
   // Handle sending a new message to a channel
   const handleChannelSend = useCallback(async (content: string, mentions: string[]) => {
-    if (!workflowId || !selectedChannel) {
-      const error = new Error('No active workflow or channel')
+    if ((!workflowId && !sessionPath) || !selectedChannel) {
+      const error = new Error('No session or channel selected')
       setToast({ message: error.message, type: 'error' })
       throw error
     }
@@ -365,6 +467,7 @@ export default function FabricPanel({ events, workflowId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workflowId,
+          sessionPath,
           channelSlug: selectedChannel.slug,
           content,
           mentions
@@ -386,12 +489,12 @@ export default function FabricPanel({ events, workflowId }: Props) {
       }
       throw error
     }
-  }, [workflowId, selectedChannel, toast])
+  }, [workflowId, sessionPath, selectedChannel, toast])
 
   // Handle sending a reply to a thread
   const handleThreadReply = useCallback(async (content: string, mentions: string[]) => {
-    if (!workflowId || !selectedThread) {
-      const error = new Error('No active workflow or thread')
+    if ((!workflowId && !sessionPath) || !selectedThread) {
+      const error = new Error('No session or thread selected')
       setToast({ message: error.message, type: 'error' })
       throw error
     }
@@ -401,6 +504,7 @@ export default function FabricPanel({ events, workflowId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workflowId,
+          sessionPath,
           threadId: selectedThread.parentMessage.id,
           content,
           mentions
@@ -422,7 +526,7 @@ export default function FabricPanel({ events, workflowId }: Props) {
       }
       throw error
     }
-  }, [workflowId, selectedThread, toast])
+  }, [workflowId, sessionPath, selectedThread, toast])
 
   // Handle adding/removing a reaction
   const handleReact = useCallback(async (messageId: string, emoji: string, remove: boolean) => {
@@ -679,6 +783,9 @@ export default function FabricPanel({ events, workflowId }: Props) {
                               </span>
                               <span className="message-time">{formatTime(thread.parentMessage.timestamp)}</span>
                             </div>
+                            {thread.isOrphaned && (
+                              <div className="orphan-notice">Original message unavailable</div>
+                            )}
                             <div className="message-content">
                               {thread.parentMessage.content}
                             </div>
@@ -708,31 +815,38 @@ export default function FabricPanel({ events, workflowId }: Props) {
                               </div>
                             )}
 
-                            {/* Reply indicator */}
-                            {thread.replies.length > 0 && (
-                              <button
-                                className="reply-indicator"
-                                onClick={() => setSelectedThread(thread)}
-                              >
-                                <div className="reply-avatars">
-                                  {getReplyAvatars(thread.replies).map((author, i) => (
-                                    <div
-                                      key={i}
-                                      className="reply-avatar"
-                                      style={{ background: getAgentColor(author) }}
-                                    >
-                                      {author.charAt(0).toUpperCase()}
-                                    </div>
-                                  ))}
-                                </div>
-                                <span className="reply-count">
-                                  {thread.replies.length} {thread.replies.length === 1 ? 'reply' : 'replies'}
-                                </span>
-                                <span className="reply-preview">
-                                  Last reply {formatDate(thread.replies[thread.replies.length - 1].timestamp)} at {formatTime(thread.replies[thread.replies.length - 1].timestamp)}
-                                </span>
-                              </button>
-                            )}
+                            <button
+                              className={`reply-indicator ${thread.replies.length === 0 ? 'empty' : ''}`}
+                              onClick={() => openThread(thread)}
+                              aria-label={`Comment on message from ${thread.parentMessage.createdBy}`}
+                            >
+                              {thread.replies.length > 0 ? (
+                                <>
+                                  <div className="reply-avatars">
+                                    {getReplyAvatars(thread.replies).map((author, i) => (
+                                      <div
+                                        key={i}
+                                        className="reply-avatar"
+                                        style={{ background: getAgentColor(author) }}
+                                      >
+                                        {author.charAt(0).toUpperCase()}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <span className="reply-count">
+                                    {thread.replies.length} {thread.replies.length === 1 ? 'reply' : 'replies'}
+                                  </span>
+                                  <span className="reply-preview">
+                                    Last reply {formatDate(thread.replies[thread.replies.length - 1].timestamp)} at {formatTime(thread.replies[thread.replies.length - 1].timestamp)}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="reply-count">Add comment</span>
+                                  <span className="reply-preview">Open thread to reply</span>
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
                         )
@@ -745,8 +859,8 @@ export default function FabricPanel({ events, workflowId }: Props) {
                       channelSlug={selectedChannel.slug}
                       placeholder={`Message #${selectedChannel.title}...`}
                       onSend={handleChannelSend}
-                      disabled={!isWorkflowActive}
-                      disabledReason="This session has ended"
+                      disabled={!canCompose}
+                      disabledReason="Unable to add comments to this session"
                       agentIds={['here', ...agents.map(a => a.id)]}
                     />
                   </div>
@@ -849,6 +963,9 @@ export default function FabricPanel({ events, workflowId }: Props) {
                       </span>
                       <span className="message-time">{formatTime(selectedThread.parentMessage.timestamp)}</span>
                     </div>
+                    {selectedThread.isOrphaned && (
+                      <div className="orphan-notice">Original message unavailable</div>
+                    )}
                     <div className="message-content">
                       {selectedThread.parentMessage.content}
                     </div>
@@ -956,8 +1073,8 @@ export default function FabricPanel({ events, workflowId }: Props) {
               threadId={selectedThread.parentMessage.id}
               placeholder="Reply to thread..."
               onSend={handleThreadReply}
-              disabled={!isWorkflowActive}
-              disabledReason="This session has ended"
+              disabled={!canCompose}
+              disabledReason="Unable to add comments to this session"
               agentIds={['here', ...agents.map(a => a.id)]}
             />
           </div>

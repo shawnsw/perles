@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS "dependencies" (
 );
 
 CREATE TABLE IF NOT EXISTS "comments" (
-	"id" INTEGER PRIMARY KEY AUTOINCREMENT,
+	"id" TEXT PRIMARY KEY,
 	"issue_id" TEXT NOT NULL,
 	"author" TEXT NOT NULL,
 	"text" TEXT NOT NULL,
@@ -144,10 +144,10 @@ INSERT INTO blocked_issues_cache (issue_id, blocked_by) VALUES
 	('TEST-3', 'TEST-1');
 
 -- Comments
-INSERT INTO comments (issue_id, author, text, created_at) VALUES
-	('TEST-1', 'alice', 'Investigating this bug', '2026-03-02T10:00:00Z'),
-	('TEST-1', 'bob', 'Found the root cause', '2026-03-03T10:00:00Z'),
-	('TEST-2', 'carol', 'Design review done', '2026-03-03T10:00:00Z');
+INSERT INTO comments (id, issue_id, author, text, created_at) VALUES
+	('comment-1', 'TEST-1', 'alice', 'Investigating this bug', '2026-03-02T10:00:00Z'),
+	('comment-2', 'TEST-1', 'bob', 'Found the root cause', '2026-03-03T10:00:00Z'),
+	('comment-3', 'TEST-2', 'carol', 'Design review done', '2026-03-03T10:00:00Z');
 `
 
 // newTestDB creates a temporary beads_rust database with schema and seed data.

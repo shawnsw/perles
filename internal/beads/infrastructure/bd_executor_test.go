@@ -14,6 +14,10 @@ func TestBDExecutor_ImplementsIssueExecutor(t *testing.T) {
 	var _ appbeads.IssueExecutor = (*BDExecutor)(nil)
 }
 
+func TestBDExecutor_ImplementsCommentReader(t *testing.T) {
+	var _ appbeads.CommentReader = (*BDExecutor)(nil)
+}
+
 // TestBDExecutor_NewBDExecutor tests the constructor.
 func TestBDExecutor_NewBDExecutor(t *testing.T) {
 	workDir := "/some/work/dir"
@@ -101,6 +105,36 @@ func TestBDExecutor_UpdateIssue_SingleField(t *testing.T) {
 	err := executor.UpdateIssue("PROJ-1", opts)
 	require.NoError(t, err)
 	require.Equal(t, []string{"update", "PROJ-1", "--title", "New Title", "--json"}, captured)
+}
+
+func TestBDExecutor_GetComments(t *testing.T) {
+	executor := newTestExecutor(func(args ...string) (string, error) {
+		require.Equal(t, []string{"comments", "PROJ-1", "--json"}, args)
+		return `[
+			{"id":"c-1","author":"alice","text":"First","created_at":"2026-04-16T12:00:00Z"},
+			{"id":"c-2","author":"bob","text":"Second","created_at":"2026-04-16T12:01:00Z"}
+		]`, nil
+	})
+
+	comments, err := executor.GetComments("PROJ-1")
+	require.NoError(t, err)
+	require.Len(t, comments, 2)
+	require.Equal(t, "alice", comments[0].Author)
+	require.Equal(t, "First", comments[0].Text)
+	require.Equal(t, "bob", comments[1].Author)
+	require.Equal(t, "Second", comments[1].Text)
+}
+
+func TestBDExecutor_AddComment(t *testing.T) {
+	var captured []string
+	executor := newTestExecutor(func(args ...string) (string, error) {
+		captured = args
+		return "", nil
+	})
+
+	err := executor.AddComment("PROJ-1", "alice", "Great work!")
+	require.NoError(t, err)
+	require.Equal(t, []string{"comments", "add", "PROJ-1", "Great work!", "--json", "--actor", "alice"}, captured)
 }
 
 // TestBDExecutor_UpdateIssue_MultipleFields verifies correct CLI args with Title + Priority + Labels.

@@ -3,6 +3,7 @@ package details
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,6 +60,11 @@ type OpenEditMenuMsg struct {
 	Issue task.Issue
 }
 
+// OpenCommentModalMsg requests opening the add comment modal.
+type OpenCommentModalMsg struct {
+	Issue task.Issue
+}
+
 // FocusPane represents which pane has focus in the details view.
 type FocusPane int
 
@@ -99,11 +105,13 @@ type Model struct {
 // Pass a TaskExecutor (which implements TaskReader) for comment loading; nil disables loading.
 func New(issue task.Issue, executor task.QueryExecutor, queryHelpers task.QueryHelpers, commentLoader task.TaskReader) Model {
 	m := Model{
-		issue:         issue,
-		executor:      executor,
-		queryHelpers:  queryHelpers,
-		commentLoader: commentLoader,
-		markdownStyle: "dark", // Default, will be overridden by SetMarkdownStyle
+		issue:          issue,
+		executor:       executor,
+		queryHelpers:   queryHelpers,
+		commentLoader:  commentLoader,
+		comments:       slices.Clone(issue.Comments),
+		commentsLoaded: len(issue.Comments) > 0,
+		markdownStyle:  "dark", // Default, will be overridden by SetMarkdownStyle
 	}
 	m.loadDependencies()
 	m.loadComments()
@@ -289,6 +297,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Open edit menu
 			return m, func() tea.Msg {
 				return OpenEditMenuMsg{Issue: m.issue}
+			}
+		case key.Matches(msg, keys.Component.CommentAction):
+			return m, func() tea.Msg {
+				return OpenCommentModalMsg{Issue: m.issue}
 			}
 		}
 	case tea.MouseMsg:
@@ -1026,6 +1038,11 @@ func (m Model) IssueID() string {
 	return m.issue.ID
 }
 
+// Issue returns a snapshot of the currently displayed issue.
+func (m Model) Issue() task.Issue {
+	return m.issue
+}
+
 // YOffset returns the current viewport scroll position.
 func (m Model) YOffset() int {
 	return m.viewport.YOffset
@@ -1036,6 +1053,23 @@ func (m Model) YOffset() int {
 func (m Model) SetYOffset(offset int) Model {
 	m.viewport.SetYOffset(offset)
 	return m
+}
+
+// ReplaceIssue rebuilds the details panel around an updated issue snapshot while
+// preserving layout, focus, and scroll state.
+func (m Model) ReplaceIssue(issue task.Issue) Model {
+	refreshed := New(issue, m.executor, m.queryHelpers, m.commentLoader).
+		SetMarkdownStyle(m.markdownStyle).
+		SetHideFooter(m.hideFooter)
+	refreshed.focusPane = m.focusPane
+	if len(refreshed.dependencies) > 0 {
+		refreshed.selectedDependency = min(m.selectedDependency, len(refreshed.dependencies)-1)
+	}
+	if m.width > 0 && m.height > 0 {
+		refreshed = refreshed.SetSize(m.width, m.height)
+		refreshed = refreshed.SetYOffset(m.YOffset())
+	}
+	return refreshed
 }
 
 // loadDependencies populates the dependencies slice from the issue's
@@ -1102,6 +1136,10 @@ func (m *Model) loadDependencies() {
 // loadComments fetches comments for the current issue using the comment loader.
 func (m *Model) loadComments() {
 	if m.commentsLoaded {
+		return
+	}
+	if m.commentLoader == nil {
+		m.commentsLoaded = true
 		return
 	}
 	comments, err := m.commentLoader.GetComments(m.issue.ID)

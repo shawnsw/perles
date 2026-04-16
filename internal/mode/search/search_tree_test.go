@@ -121,6 +121,31 @@ func TestSearch_TreeView_Golden_DownDirection(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(view))
 }
 
+func TestSearch_TreeView_NarrowWidth_StacksPanels(t *testing.T) {
+	rootIssue := task.Issue{
+		ID:        "epic-1",
+		TitleText: "Epic: Implement new feature",
+		Type:      task.TypeEpic,
+		Status:    task.StatusOpen,
+		Priority:  1,
+		Children:  []string{"task-1"},
+	}
+	issues := []task.Issue{
+		rootIssue,
+		{ID: "task-1", TitleText: "Design API", Type: task.TypeTask, Status: task.StatusOpen, Priority: 1, ParentID: "epic-1"},
+	}
+
+	m := createTestModelWithTree(t, rootIssue, issues)
+	m.details = details.New(rootIssue, nil, nil, nil).SetSize(40, 10)
+	m.hasDetail = true
+	m = m.SetSize(80, 24)
+
+	view := m.renderMainView()
+	for _, line := range strings.Split(view, "\n") {
+		require.False(t, strings.Contains(line, "Tree (") && strings.Contains(line, "Issue Details"))
+	}
+}
+
 func TestSearch_TreeView_Golden_UpDirection(t *testing.T) {
 	rootIssue := task.Issue{
 		ID:        "child-1",

@@ -95,7 +95,11 @@ export default function SessionViewer({ session }: Props) {
         )}
         
         {activeTab === 'fabric' && (
-          <FabricPanel events={session.fabric} workflowId={session.metadata?.workflow_id} />
+          <FabricPanel
+            events={session.fabric}
+            workflowId={session.metadata?.workflow_id}
+            sessionPath={session.path}
+          />
         )}
 
         {activeTab === 'commands' && (

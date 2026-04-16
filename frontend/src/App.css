@@ -1,5 +1,8 @@
 .app {
+  min-height: 100vh;
+  min-height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -18,6 +21,7 @@
 .app-header h1 {
   font-size: 1.5rem;
   font-weight: 600;
+  min-width: 0;
 }
 
 .clear-btn {
@@ -54,6 +58,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  min-width: 0;
 }
 
 .session-id-display {
@@ -63,6 +68,8 @@
   background: var(--bg-tertiary);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .last-refreshed {
@@ -86,4 +93,48 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .header-right {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .session-id-display {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0.875rem;
+  }
+
+  .app-header h1 {
+    font-size: 1.125rem;
+  }
+
+  .header-right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clear-btn {
+    width: 100%;
+  }
+
+  .session-id-display {
+    width: 100%;
+  }
 }

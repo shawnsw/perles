@@ -166,6 +166,11 @@ func (c TreeColumn) Width() int {
 	return c.width
 }
 
+// Height returns the column's height for rendering.
+func (c TreeColumn) Height() int {
+	return c.height
+}
+
 // LoadCmd returns a tea.Cmd that loads tree data asynchronously.
 // viewIndex identifies which view, columnIndex identifies which column within that view.
 func (c TreeColumn) LoadCmd(viewIndex, columnIndex int) tea.Cmd {

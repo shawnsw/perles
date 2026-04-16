@@ -321,14 +321,53 @@ func (e *BDExecutor) ShowIssue(issueID string) (*domain.Issue, error) {
 	return &issues[0], nil
 }
 
-// AddComment executes 'bd comment <id> --author <author> -- <text>'.
+// GetComments executes 'bd comments <id> --json' and parses the JSON output.
+func (e *BDExecutor) GetComments(issueID string) ([]domain.Comment, error) {
+	start := time.Now()
+	defer func() {
+		log.Debug(log.CatBeads, "GetComments completed", "issueID", issueID, "duration", time.Since(start))
+	}()
+
+	output, err := e.runBeads("comments", issueID, "--json")
+	if err != nil {
+		log.Error(log.CatBeads, "GetComments failed", "issueID", issueID, "error", err)
+		return nil, err
+	}
+
+	var raw []struct {
+		Author    string    `json:"author"`
+		Text      string    `json:"text"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		err = fmt.Errorf("failed to parse bd comments output: %w", err)
+		log.Error(log.CatBeads, "GetComments parse failed", "issueID", issueID, "error", err)
+		return nil, err
+	}
+
+	comments := make([]domain.Comment, len(raw))
+	for i, c := range raw {
+		comments[i] = domain.Comment{
+			Author:    c.Author,
+			Text:      c.Text,
+			CreatedAt: c.CreatedAt,
+		}
+	}
+	return comments, nil
+}
+
+// AddComment executes 'bd comments add <id> <text>'.
 func (e *BDExecutor) AddComment(issueID, author, text string) error {
 	start := time.Now()
 	defer func() {
 		log.Debug(log.CatBeads, "AddComment completed", "issueID", issueID, "author", author, "duration", time.Since(start))
 	}()
 
-	if _, err := e.runBeads("comment", issueID, "--author", author, "--", text); err != nil {
+	args := []string{"comments", "add", issueID, text, "--json"}
+	if author != "" {
+		args = append(args, "--actor", author)
+	}
+	if _, err := e.runBeads(args...); err != nil {
 		log.Error(log.CatBeads, "AddComment failed", "issueID", issueID, "error", err)
 		return err
 	}

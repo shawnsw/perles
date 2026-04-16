@@ -157,7 +157,7 @@ export default function SessionLoader({ onLoad, error }: Props) {
             sessions?.apps.map(app => (
               <div key={app.name} className="app-group">
                 <button 
-                  className="app-header"
+                  className="session-app-header"
                   onClick={() => toggleApp(app.name)}
                 >
                   <span className="expand-icon">
@@ -171,7 +171,7 @@ export default function SessionLoader({ onLoad, error }: Props) {
                 </button>
 
                 {expandedApps.has(app.name) && (
-                  <div className="app-content">
+                  <div className="session-app-content">
                     {app.dates.map(dateEntry => {
                       const dateKey = `${app.name}/${dateEntry.date}`
                       return (

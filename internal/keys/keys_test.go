@@ -44,6 +44,17 @@ func TestDashboardFullHelp_IncludesRename(t *testing.T) {
 	require.Contains(t, help[2], Dashboard.Rename)
 }
 
+func TestComponent_CommentAction_KeyAssignment(t *testing.T) {
+	keys := Component.CommentAction.Keys()
+	require.Equal(t, []string{"c"}, keys, "CommentAction should be bound to c")
+}
+
+func TestComponent_CommentAction_HelpText(t *testing.T) {
+	help := Component.CommentAction.Help()
+	require.Equal(t, "c", help.Key, "CommentAction help key should be c")
+	require.Equal(t, "add comment", help.Desc, "CommentAction help desc should be 'add comment'")
+}
+
 func TestDiffViewer_ExportedStruct(t *testing.T) {
 	// Verify DiffViewer struct is exported and accessible
 	require.NotNil(t, DiffViewer.Open)

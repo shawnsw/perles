@@ -32,6 +32,8 @@ const (
 	ColReady      ColumnIndex = 1
 	ColInProgress ColumnIndex = 2
 	ColClosed     ColumnIndex = 3
+
+	minHorizontalColumnWidth = 28
 )
 
 // View represents a named collection of columns.
@@ -135,20 +137,38 @@ func (m Model) SetSize(width, height int) Model {
 		return m
 	}
 
-	// Distribute width evenly, giving remainder to the last columns
+	if m.useStackedLayout() {
+		baseHeight := height / colCount
+		remainder := height % colCount
+
+		for i := range m.columns {
+			colHeight := baseHeight
+			if i >= colCount-remainder {
+				colHeight++
+			}
+			m.columns[i] = m.columns[i].SetSize(width, max(colHeight, 3))
+		}
+		return m
+	}
+
 	baseWidth := width / colCount
 	remainder := width % colCount
-	contentHeight := height
 
 	for i := range m.columns {
 		colWidth := baseWidth
-		// Give extra width to the last 'remainder' columns
 		if i >= colCount-remainder {
 			colWidth++
 		}
-		m.columns[i] = m.columns[i].SetSize(colWidth, contentHeight)
+		m.columns[i] = m.columns[i].SetSize(colWidth, height)
 	}
 	return m
+}
+
+func (m Model) useStackedLayout() bool {
+	if len(m.columns) <= 1 {
+		return false
+	}
+	return m.width/len(m.columns) < minHorizontalColumnWidth
 }
 
 // SetShowCounts sets whether to display counts in column titles.
@@ -518,9 +538,6 @@ func (m Model) View() string {
 
 	var cols []string
 
-	// Use height as-is - caller should account for status bar
-	contentHeight := max(m.height, 3)
-
 	for i, col := range m.columns {
 		isFocused := i == m.focused
 		// Only show focus highlight when board has focus
@@ -536,7 +553,7 @@ func (m Model) View() string {
 		rendered := panes.BorderedPane(panes.BorderConfig{
 			Content:            col.View(),
 			Width:              col.Width(),
-			Height:             contentHeight,
+			Height:             max(col.Height(), 3),
 			TopLeft:            col.Title(),
 			TopRight:           col.RightTitle(),
 			Focused:            showFocusHighlight,
@@ -546,8 +563,12 @@ func (m Model) View() string {
 		cols = append(cols, rendered)
 	}
 
-	// Scan for zone markers and register positions for mouse click detection
-	return zone.Scan(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
+	layout := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+	if m.useStackedLayout() {
+		layout = lipgloss.JoinVertical(lipgloss.Left, cols...)
+	}
+
+	return zone.Scan(layout)
 }
 
 // renderEmptyState renders a centered message when no columns are configured.
