@@ -67,3 +67,7 @@ func TestFormatRelativeTime(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatRelativeTimeWithClock_NilClockUsesCurrentTime(t *testing.T) {
+	require.Equal(t, "now", FormatRelativeTimeWithClock(time.Now(), nil))
+}

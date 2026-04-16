@@ -145,10 +145,12 @@ func (m *Model) calculateEpicDetailsSize() (int, int) {
 	if m.width == 0 || m.height == 0 {
 		return 0, 0
 	}
+	if m.maximizedPane == dashboardPaneEpicDetails {
+		return max(m.width-2, 1), max(m.height-2, 1)
+	}
 
 	// Same logic as SetSize and renderView
-	footerHeight := 3
-	contentHeight := max(m.height-footerHeight, 5)
+	contentHeight := m.contentHeight()
 
 	minTableHeight := minWorkflowTableRows + 3
 	tableHeight := max(contentHeight*55/100, minTableHeight)

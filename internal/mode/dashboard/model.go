@@ -42,6 +42,7 @@ import (
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
+	"github.com/zjrosen/perles/internal/ui/shared/panes"
 	"github.com/zjrosen/perles/internal/ui/shared/table"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/shared/vimtextarea"
@@ -74,6 +75,17 @@ const (
 	EpicFocusTree EpicViewFocus = iota
 	// EpicFocusDetails indicates the details pane has focus.
 	EpicFocusDetails
+)
+
+type dashboardPane int
+
+const (
+	dashboardPaneNone dashboardPane = iota
+	dashboardPaneWorkflowTable
+	dashboardPaneEpicTree
+	dashboardPaneEpicDetails
+	dashboardPaneCoordinatorContent
+	dashboardPaneCoordinatorInput
 )
 
 // epicTreeLoadedMsg is sent when the epic tree data has been loaded.
@@ -145,6 +157,7 @@ type Model struct {
 	epicViewFocus    EpicViewFocus  // Which pane within epic view has focus
 	lastLoadedEpicID string         // ID of the last loaded epic (for stale response detection)
 	focus            DashboardFocus // Which zone has focus (table, epic, coordinator)
+	maximizedPane    dashboardPane  // Fullscreen pane, or none for normal layout
 
 	// Event subscription (global - all workflows)
 	eventCh     <-chan controlplane.ControlPlaneEvent
@@ -731,24 +744,38 @@ func (m Model) View() string {
 func (m Model) SetSize(width, height int) mode.Controller {
 	m.width = width
 	m.height = height
+	return m.resizeForCurrentDimensions()
+}
+
+func (m Model) resizeForCurrentDimensions() Model {
 	if m.newWorkflowModal != nil {
-		m.newWorkflowModal = m.newWorkflowModal.SetSize(width, height)
+		m.newWorkflowModal = m.newWorkflowModal.SetSize(m.width, m.height)
 	}
-	m.helpModal = m.helpModal.SetSize(width, height)
+	m.helpModal = m.helpModal.SetSize(m.width, m.height)
 	if m.commentEditor != nil {
-		editor := m.commentEditor.SetSize(width, height)
+		editor := m.commentEditor.SetSize(m.width, m.height)
 		m.commentEditor = &editor
 	}
 	if m.issueEditor != nil {
-		editor := m.issueEditor.SetSize(width, height)
+		editor := m.issueEditor.SetSize(m.width, m.height)
 		m.issueEditor = &editor
 	}
 
 	// Recalculate tree and details dimensions
 	if m.epicTree != nil {
+		if m.maximizedPane == dashboardPaneEpicTree {
+			m.epicTree.SetSize(max(m.width-2, 1), max(m.height-2, 1))
+			return m
+		}
+		if m.maximizedPane == dashboardPaneEpicDetails {
+			if m.hasEpicDetail {
+				m.epicDetails = m.epicDetails.SetSize(max(m.width-2, 1), max(m.height-2, 1))
+			}
+			return m
+		}
+
 		// Calculate available height for epic section (same logic as renderView)
-		footerHeight := 3 // Action hints pane
-		contentHeight := max(height-footerHeight, 5)
+		contentHeight := m.contentHeight()
 
 		// 55%/45% split (table/epic)
 		minTableHeight := minWorkflowTableRows + 3 // header/borders
@@ -757,9 +784,9 @@ func (m Model) SetSize(width, height int) mode.Controller {
 
 		if epicSectionHeight >= 5 {
 			// Calculate widths accounting for coordinator panel
-			epicWidth := width
+			epicWidth := m.width
 			if m.showCoordinatorPanel && m.coordinatorPanel != nil {
-				epicWidth = width - CoordinatorPanelWidth
+				epicWidth = m.width - CoordinatorPanelWidth
 			}
 
 			// Calculate tree/details layout
@@ -776,6 +803,74 @@ func (m Model) SetSize(width, height int) mode.Controller {
 	}
 
 	return m
+}
+
+func (m Model) hasMaximizedPane() bool {
+	return m.maximizedPane != dashboardPaneNone
+}
+
+func (m Model) footerHeight() int {
+	if len(m.workflows) > 0 && !m.hasMaximizedPane() {
+		return 3
+	}
+	return 0
+}
+
+func (m Model) contentHeight() int {
+	return max(m.height-m.footerHeight(), 5)
+}
+
+func (m Model) headerAction(pane dashboardPane) panes.HeaderAction {
+	label := "[+]"
+	if m.maximizedPane == pane {
+		label = "[-]"
+	}
+
+	zoneID := ""
+	switch pane {
+	case dashboardPaneWorkflowTable:
+		zoneID = zoneWorkflowAction
+	case dashboardPaneEpicTree:
+		zoneID = zoneEpicTreeAction
+	case dashboardPaneEpicDetails:
+		zoneID = zoneEpicDetailsAction
+	case dashboardPaneCoordinatorContent:
+		zoneID = zoneCoordinatorContentAction
+	case dashboardPaneCoordinatorInput:
+		zoneID = zoneCoordinatorInputAction
+	}
+
+	return panes.HeaderAction{Label: label, ZoneID: zoneID}
+}
+
+func (m Model) toggleMaximizedPane(pane dashboardPane) Model {
+	if (pane == dashboardPaneCoordinatorContent || pane == dashboardPaneCoordinatorInput) &&
+		(!m.showCoordinatorPanel || m.coordinatorPanel == nil) {
+		return m
+	}
+
+	if m.maximizedPane == pane {
+		m.maximizedPane = dashboardPaneNone
+	} else {
+		m.maximizedPane = pane
+	}
+
+	switch pane {
+	case dashboardPaneWorkflowTable:
+		m.focus = FocusTable
+	case dashboardPaneEpicTree:
+		m.focus = FocusEpicView
+		m.epicViewFocus = EpicFocusTree
+	case dashboardPaneEpicDetails:
+		m.focus = FocusEpicView
+		m.epicViewFocus = EpicFocusDetails
+	case dashboardPaneCoordinatorContent, dashboardPaneCoordinatorInput:
+		m.focus = FocusCoordinator
+	}
+
+	m.updateComponentFocusStates()
+	m.tableConfigCache = m.createWorkflowTableConfig()
+	return m.resizeForCurrentDimensions()
 }
 
 // Cleanup releases resources when exiting the dashboard mode.
@@ -1148,6 +1243,18 @@ func (m Model) handleCoordinatorKeys(msg tea.KeyMsg) (mode.Controller, tea.Cmd) 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (mode.Controller, tea.Cmd) {
 	// Only handle left-click release events for zone selection
 	if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
+		for zoneID, pane := range map[string]dashboardPane{
+			zoneWorkflowAction:           dashboardPaneWorkflowTable,
+			zoneEpicTreeAction:           dashboardPaneEpicTree,
+			zoneEpicDetailsAction:        dashboardPaneEpicDetails,
+			zoneCoordinatorContentAction: dashboardPaneCoordinatorContent,
+			zoneCoordinatorInputAction:   dashboardPaneCoordinatorInput,
+		} {
+			if z := zone.Get(zoneID); z != nil && z.InBounds(msg) {
+				return m.toggleMaximizedPane(pane), nil
+			}
+		}
+
 		// Check workflow row zones
 		filtered := m.getFilteredWorkflows()
 		for i := range filtered {
@@ -1285,11 +1392,16 @@ func (m Model) toggleCoordinatorPanel() (mode.Controller, tea.Cmd) {
 		// Close the panel
 		m.showCoordinatorPanel = false
 		m.coordinatorPanel = nil
-		return m, nil
+		if m.maximizedPane == dashboardPaneCoordinatorContent || m.maximizedPane == dashboardPaneCoordinatorInput {
+			m.maximizedPane = dashboardPaneNone
+		}
+		m.tableConfigCache = m.createWorkflowTableConfig()
+		return m.resizeForCurrentDimensions(), nil
 	}
 
 	m.openCoordinatorPanelForSelected()
-	return m, nil
+	m.tableConfigCache = m.createWorkflowTableConfig()
+	return m.resizeForCurrentDimensions(), nil
 }
 
 // openCoordinatorPanelForSelected opens the coordinator panel for the currently selected workflow.

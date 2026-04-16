@@ -1,4 +1,4 @@
-╭─ Workflows ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Workflows ──────────────────────────────────────────────────────────────────────────────────────────────────── [+] ─╮
 │🔔 🔒 Status    Name                EpicID           WorkDir                 Workers  Health   Uptime   Started       │
 │      RUNNING   Worktree workflow   -                🌳 feature-branch       2        ❤️ 0s    -        -             │
 │      PENDING   Custom workdir w... -                project                 0        -        -        -             │

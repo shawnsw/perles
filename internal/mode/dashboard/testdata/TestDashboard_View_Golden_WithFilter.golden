@@ -1,4 +1,4 @@
-╭─ Workflows ──────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Workflows ──────────────────────────────────────────────────────────────────────────────── [+] ─╮
 │🔔 🔒 Status    Name                                   EpicID           Workers  Health   Uptime  │
 │      RUNNING   Build authentication system            -                3        ❤️ 0s    -       │
 │      PAUSED    Auth token refresh handler             -                1        -        -       │

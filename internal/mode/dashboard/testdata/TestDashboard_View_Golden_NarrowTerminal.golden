@@ -1,4 +1,4 @@
-╭─ Workflows ──────────────────────────────────────────────────────────────────╮
+╭─ Workflows ──────────────────────────────────────────────────────────── [+] ─╮
 │🔔 🔒 Status    Name                                Workers  Health   Uptime  │
 │      RUNNING   Build auth system                   2        ❤️ 0s    -       │
 │      PENDING   Fix bug                             0        -        -       │

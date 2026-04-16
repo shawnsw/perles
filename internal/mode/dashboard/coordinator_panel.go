@@ -104,6 +104,10 @@ type CoordinatorPanel struct {
 	width  int
 	height int
 
+	// Optional header actions for the two bordered panes rendered by the panel.
+	contentHeaderAction panes.HeaderAction
+	inputHeaderAction   panes.HeaderAction
+
 	// Screen position for mouse coordinate mapping
 	screenXOffset int // X offset from left edge of terminal
 	screenYOffset int // Y offset from top (where viewports start, after tab bar)
@@ -282,6 +286,12 @@ func (p *CoordinatorPanel) SetSize(width, height int) {
 	// Width: panel width - 4 (2 for borders, 2 for padding)
 	// Height: 4 lines (allows input to grow/scroll properly)
 	p.input.SetSize(max(width-4, 1), 4)
+}
+
+// SetHeaderActions updates the maximize/restore controls for the panel panes.
+func (p *CoordinatorPanel) SetHeaderActions(contentAction, inputAction panes.HeaderAction) {
+	p.contentHeaderAction = contentAction
+	p.inputHeaderAction = inputAction
 }
 
 // SetScreenXOffset sets the panel's X position on screen for mouse coordinate mapping.
@@ -878,25 +888,7 @@ func (p *CoordinatorPanel) View() string {
 	inputHeight := 6
 	contentHeight := p.height - inputHeight
 
-	// Build tabs
-	tabs := p.buildTabs(contentHeight)
-
-	// Determine border color based on active tab's status
-	borderColor := p.getActiveBorderColor()
-
-	// Determine bottom-left indicator based on active tab
-	bottomLeft := p.getActiveBottomIndicators()
-
-	// Render the tabbed pane
-	tabbedPane := panes.BorderedPane(panes.BorderConfig{
-		Width:       p.width,
-		Height:      contentHeight,
-		Tabs:        tabs,
-		ActiveTab:   p.activeTab,
-		BorderColor: borderColor,
-		BottomLeft:  bottomLeft,
-		BottomRight: p.getActiveMetricsDisplay(),
-	})
+	tabbedPane := p.renderContentPane(p.width, contentHeight)
 
 	// Render input pane with zone mark for click detection
 	inputView := zone.Mark(zoneChatInput, p.renderInputPane(p.width, inputHeight))
@@ -935,6 +927,23 @@ func (p *CoordinatorPanel) View() string {
 	}
 
 	return baseView
+}
+
+func (p *CoordinatorPanel) renderContentPane(width, height int) string {
+	tabs := p.buildTabs(height)
+	borderColor := p.getActiveBorderColor()
+	bottomLeft := p.getActiveBottomIndicators()
+
+	return panes.BorderedPane(panes.BorderConfig{
+		Width:        width,
+		Height:       height,
+		Tabs:         tabs,
+		ActiveTab:    p.activeTab,
+		HeaderAction: p.contentHeaderAction,
+		BorderColor:  borderColor,
+		BottomLeft:   bottomLeft,
+		BottomRight:  p.getActiveMetricsDisplay(),
+	})
 }
 
 // buildTabs constructs the tab slice for the panel.
@@ -1495,6 +1504,7 @@ func (p *CoordinatorPanel) renderInputPane(width, height int) string {
 		TopRight:           threadIndicator,
 		BottomLeft:         p.input.ModeIndicator(),
 		BottomRight:        channelIndicator,
+		HeaderAction:       p.inputHeaderAction,
 		Focused:            false, // Don't show focused border styling
 		TitleColor:         styles.BorderDefaultColor,
 		FocusedBorderColor: styles.BorderDefaultColor,
