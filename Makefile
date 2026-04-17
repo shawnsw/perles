@@ -76,6 +76,7 @@ test-update:
 		./internal/ui/shared/vimtextarea/... \
 		./internal/ui/styles/... \
 		./internal/ui/tree/... \
+		./internal/mode/kanban/... \
 		./internal/mode/dashboard/... \
 		./internal/mode/search/... \
 		./internal/mode/playground/... \

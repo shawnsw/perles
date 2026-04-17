@@ -59,7 +59,7 @@ func (e *BeadsTaskExecutor) GetComments(issueID string) ([]task.Comment, error) 
 		if fallbackErr == nil {
 			return ToTaskComments(fallbackComments), nil
 		}
-		return nil, fmt.Errorf("reading comments failed: %w; fallback failed: %v", err, fallbackErr)
+		return nil, fmt.Errorf("reading comments failed: %w; fallback failed: %w", err, fallbackErr)
 	}
 	if e.fallbackCommentReader == nil {
 		return nil, nil
