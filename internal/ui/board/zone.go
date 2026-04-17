@@ -17,6 +17,11 @@ func makeZoneID(colIdx int, issueID string) string {
 	return fmt.Sprintf("col:%d:issue:%s", colIdx, issueID)
 }
 
+// makeHeaderActionZoneID creates a zone ID for a column header action button.
+func makeHeaderActionZoneID(colIdx int) string {
+	return fmt.Sprintf("col:%d:header-action", colIdx)
+}
+
 // MakeZoneID is an exported version of makeZoneID for use in tests.
 // It creates a zone ID for an issue in a specific column.
 func MakeZoneID(colIdx int, issueID string) string {

@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"fmt"
+
 	appbeads "github.com/zjrosen/perles/internal/beads/application"
 	"github.com/zjrosen/perles/internal/task"
 )
@@ -10,8 +12,9 @@ var _ task.TaskExecutor = (*BeadsTaskExecutor)(nil)
 
 // BeadsTaskExecutor wraps a beads IssueExecutor to implement task.TaskExecutor.
 type BeadsTaskExecutor struct {
-	inner         appbeads.IssueExecutor
-	commentReader appbeads.CommentReader // optional, provides GetComments
+	inner                 appbeads.IssueExecutor
+	commentReader         appbeads.CommentReader // optional, primary reader
+	fallbackCommentReader appbeads.CommentReader // optional, CLI-compatible fallback
 }
 
 // TaskExecutorOption configures a BeadsTaskExecutor.
@@ -26,6 +29,14 @@ func WithCommentReader(cr appbeads.CommentReader) TaskExecutorOption {
 	}
 }
 
+// WithFallbackCommentReader sets a fallback comment reader used when the
+// primary reader cannot serve comments for the current backend/schema.
+func WithFallbackCommentReader(cr appbeads.CommentReader) TaskExecutorOption {
+	return func(e *BeadsTaskExecutor) {
+		e.fallbackCommentReader = cr
+	}
+}
+
 // NewBeadsTaskExecutor creates a new BeadsTaskExecutor wrapping the given IssueExecutor.
 func NewBeadsTaskExecutor(inner appbeads.IssueExecutor, opts ...TaskExecutorOption) *BeadsTaskExecutor {
 	e := &BeadsTaskExecutor{inner: inner}
@@ -36,10 +47,24 @@ func NewBeadsTaskExecutor(inner appbeads.IssueExecutor, opts ...TaskExecutorOpti
 }
 
 func (e *BeadsTaskExecutor) GetComments(issueID string) ([]task.Comment, error) {
-	if e.commentReader == nil {
+	if e.commentReader != nil {
+		comments, err := e.commentReader.GetComments(issueID)
+		if err == nil {
+			return ToTaskComments(comments), nil
+		}
+		if e.fallbackCommentReader == nil {
+			return nil, err
+		}
+		fallbackComments, fallbackErr := e.fallbackCommentReader.GetComments(issueID)
+		if fallbackErr == nil {
+			return ToTaskComments(fallbackComments), nil
+		}
+		return nil, fmt.Errorf("reading comments failed: %w; fallback failed: %v", err, fallbackErr)
+	}
+	if e.fallbackCommentReader == nil {
 		return nil, nil
 	}
-	comments, err := e.commentReader.GetComments(issueID)
+	comments, err := e.fallbackCommentReader.GetComments(issueID)
 	if err != nil {
 		return nil, err
 	}

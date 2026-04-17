@@ -125,6 +125,7 @@ type HealthResponse struct {
 // SendMessageRequest is the request body for POST /api/fabric/send-message.
 type SendMessageRequest struct {
 	WorkflowID  string   `json:"workflowId"`
+	SessionPath string   `json:"sessionPath,omitempty"`
 	ChannelSlug string   `json:"channelSlug"`
 	Content     string   `json:"content"`
 	Mentions    []string `json:"mentions,omitempty"`
@@ -139,10 +140,11 @@ type SendMessageResponse struct {
 
 // ReplyRequest is the request body for POST /api/fabric/reply.
 type ReplyRequest struct {
-	WorkflowID string   `json:"workflowId"`
-	ThreadID   string   `json:"threadId"`
-	Content    string   `json:"content"`
-	Mentions   []string `json:"mentions,omitempty"`
+	WorkflowID  string   `json:"workflowId"`
+	SessionPath string   `json:"sessionPath,omitempty"`
+	ThreadID    string   `json:"threadId"`
+	Content     string   `json:"content"`
+	Mentions    []string `json:"mentions,omitempty"`
 }
 
 // Agent represents an agent (coordinator or worker) in a workflow.

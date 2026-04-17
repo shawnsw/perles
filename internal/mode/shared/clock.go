@@ -21,6 +21,9 @@ func (RealClock) Now() time.Time { return time.Now() }
 // FormatRelativeTimeWithClock returns a human-friendly relative timestamp using the provided clock.
 // Examples: "now", "5m ago", "3h ago", "2d ago", "1w ago", "3mo ago", "1y ago"
 func FormatRelativeTimeWithClock(t time.Time, clock Clock) string {
+	if clock == nil {
+		return FormatRelativeTimeFrom(t, time.Now())
+	}
 	return FormatRelativeTimeFrom(t, clock.Now())
 }
 

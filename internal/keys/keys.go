@@ -267,22 +267,23 @@ var Search = struct {
 
 // Component contains keybindings shared across UI components.
 var Component = struct {
-	Confirm    key.Binding
-	Cancel     key.Binding
-	Tab        key.Binding
-	ShiftTab   key.Binding
-	Delete     key.Binding
-	Next       key.Binding // Alternative navigation (ctrl+n)
-	Prev       key.Binding // Alternative navigation (ctrl+p)
-	GotoTop    key.Binding // Navigate to top (g)
-	GotoBottom key.Binding // Navigate to bottom (G)
-	EditAction key.Binding // Edit action (ctrl+e) - opens edit menu
-	DelAction  key.Binding // Delete action (d) - triggers delete
-	Clear      key.Binding // Clear action (c) - clears content
-	Toggle     key.Binding // Toggle action (space)
-	ModeToggle key.Binding // Mode toggle (m)
-	Close      key.Binding // Close overlay (ctrl+x)
-	Save       key.Binding // Save action (ctrl+s)
+	Confirm       key.Binding
+	Cancel        key.Binding
+	Tab           key.Binding
+	ShiftTab      key.Binding
+	Delete        key.Binding
+	Next          key.Binding // Alternative navigation (ctrl+n)
+	Prev          key.Binding // Alternative navigation (ctrl+p)
+	GotoTop       key.Binding // Navigate to top (g)
+	GotoBottom    key.Binding // Navigate to bottom (G)
+	EditAction    key.Binding // Edit action (ctrl+e) - opens edit menu
+	CommentAction key.Binding // Comment action (c) - opens add comment modal
+	DelAction     key.Binding // Delete action (d) - triggers delete
+	Clear         key.Binding // Clear action (c) - clears content
+	Toggle        key.Binding // Toggle action (space)
+	ModeToggle    key.Binding // Mode toggle (m)
+	Close         key.Binding // Close overlay (ctrl+x)
+	Save          key.Binding // Save action (ctrl+s)
 }{
 	Confirm: key.NewBinding(
 		key.WithKeys("enter"),
@@ -323,6 +324,10 @@ var Component = struct {
 	EditAction: key.NewBinding(
 		key.WithKeys("ctrl+e"),
 		key.WithHelp("ctrl+e", "edit issue"),
+	),
+	CommentAction: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "add comment"),
 	),
 	DelAction: key.NewBinding(
 		key.WithKeys("ctrl+d"),

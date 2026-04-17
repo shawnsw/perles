@@ -247,6 +247,7 @@ func (m Model) createWorkflowTableConfig() table.TableConfig {
 		ShowBorder:         true,
 		Scrollable:         true,
 		EmptyMessage:       m.getEmptyMessage(),
+		HeaderAction:       m.headerAction(dashboardPaneWorkflowTable),
 		BorderColor:        styles.BorderDefaultColor,
 		Focused:            m.focus == FocusTable,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -278,6 +279,17 @@ func (m Model) getTableTitle() string {
 func (m Model) renderView() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
+	}
+
+	if m.coordinatorPanel != nil {
+		m.coordinatorPanel.SetHeaderActions(
+			m.headerAction(dashboardPaneCoordinatorContent),
+			m.headerAction(dashboardPaneCoordinatorInput),
+		)
+	}
+
+	if m.hasMaximizedPane() {
+		return m.renderMaximizedPane(m.width, m.contentHeight())
 	}
 
 	// Footer section (action hints) - only show when there are workflows
@@ -366,6 +378,33 @@ func (m Model) renderView() string {
 	// Use Place to position content in a fixed-size container
 	// This ensures the layout fills the entire terminal with footer at bottom
 	return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, view)
+}
+
+func (m Model) renderMaximizedPane(width, height int) string {
+	switch m.maximizedPane {
+	case dashboardPaneWorkflowTable:
+		return m.renderBorderedWorkflowTable(width, height)
+	case dashboardPaneEpicTree, dashboardPaneEpicDetails:
+		return m.renderSingleEpicPane(width, height, m.maximizedPane)
+	case dashboardPaneCoordinatorContent:
+		if m.coordinatorPanel == nil {
+			return ""
+		}
+		m.coordinatorPanel.SetSize(width, height)
+		m.coordinatorPanel.SetScreenXOffset(0)
+		m.coordinatorPanel.SetScreenYOffset(0)
+		return m.coordinatorPanel.renderContentPane(width, height)
+	case dashboardPaneCoordinatorInput:
+		if m.coordinatorPanel == nil {
+			return ""
+		}
+		m.coordinatorPanel.SetSize(width, height)
+		m.coordinatorPanel.SetScreenXOffset(0)
+		m.coordinatorPanel.SetScreenYOffset(0)
+		return zone.Mark(zoneChatInput, m.coordinatorPanel.renderInputPane(width, height))
+	default:
+		return ""
+	}
 }
 
 // renderBorderedWorkflowTable renders the workflow table inside a bordered pane.
@@ -553,94 +592,111 @@ const minWorkflowTableRows = 6
 func (m Model) renderEpicSection(width, height int) string {
 	// Check minimum width threshold
 	if width < minEpicSectionWidth {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(colorDimmed).
-			Italic(true).
-			PaddingLeft(1)
-		return emptyStyle.Render("Terminal too narrow for tree view (need 50+ chars)")
+		return renderEpicEmptyState("Terminal too narrow for tree view (need 50+ chars)")
 	}
 
 	// Handle no epic associated with workflow
 	wf := m.SelectedWorkflow()
 	if wf == nil || wf.EpicID == "" {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(colorDimmed).
-			Italic(true).
-			PaddingLeft(1)
-		return emptyStyle.Render("No epic associated with this workflow")
+		return renderEpicEmptyState("No epic associated with this workflow")
 	}
 
 	// Handle no tree loaded yet (tree loads fast, so just show empty state briefly)
 	if m.epicTree == nil || m.epicTree.Root() == nil {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(colorDimmed).
-			Italic(true).
-			PaddingLeft(1)
-		return emptyStyle.Render("No tasks in epic")
+		return renderEpicEmptyState("No tasks in epic")
 	}
 
 	// Calculate tree/details layout
 	layout := calculateEpicTreeLayout(width)
 
-	// Set sizes for tree
-	m.epicTree.SetSize(layout.treeWidth-2, height-2) // -2 for borders
-
-	// Render tree pane with border
-	treeContent := m.epicTree.View()
-	treePaneStyle := m.getEpicPaneBorderConfig(EpicFocusTree, layout.treeWidth, height, "Epic")
-
-	// Calculate progress bar for tree pane
-	var progressBar string
-	if m.epicTree.Root() != nil {
-		closed, total := m.epicTree.Root().CalculateProgress()
-		progressBar = renderCompactProgress(closed, total)
-	}
-
-	treePane := zone.Mark(zoneEpicTree, panes.BorderedPane(panes.BorderConfig{
-		Content:            treeContent,
-		Width:              treePaneStyle.width,
-		Height:             treePaneStyle.height,
-		TopLeft:            treePaneStyle.title,
-		TopRight:           progressBar,
-		Focused:            treePaneStyle.focused,
-		TitleColor:         styles.OverlayTitleColor,
-		FocusedBorderColor: styles.BorderHighlightFocusColor,
-	}))
+	treePane := m.renderEpicTreePane(layout.treeWidth, height)
 
 	// If not showing details, just return the tree pane
 	if !layout.showDetails {
 		return treePane
 	}
 
-	// Set details size and render
-	if m.hasEpicDetail {
-		m.epicDetails = m.epicDetails.SetSize(layout.detailsWidth-2, height-2)
+	detailsPane := m.renderEpicDetailsPane(layout.detailsWidth, height)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, treePane, detailsPane)
+}
+
+func renderEpicEmptyState(message string) string {
+	return lipgloss.NewStyle().
+		Foreground(colorDimmed).
+		Italic(true).
+		PaddingLeft(1).
+		Render(message)
+}
+
+func (m Model) renderSingleEpicPane(width, height int, pane dashboardPane) string {
+	wf := m.SelectedWorkflow()
+	if wf == nil || wf.EpicID == "" {
+		return renderEpicEmptyState("No epic associated with this workflow")
 	}
 
-	// Render details pane with border
-	var detailsContent string
+	switch pane {
+	case dashboardPaneEpicTree:
+		if m.epicTree == nil || m.epicTree.Root() == nil {
+			return renderEpicEmptyState("No tasks in epic")
+		}
+		return m.renderEpicTreePane(width, height)
+	case dashboardPaneEpicDetails:
+		if !m.hasEpicDetail && (m.epicTree == nil || m.epicTree.Root() == nil) {
+			return renderEpicEmptyState("No tasks in epic")
+		}
+		return m.renderEpicDetailsPane(width, height)
+	default:
+		return ""
+	}
+}
+
+func (m Model) renderEpicTreePane(width, height int) string {
+	m.epicTree.SetSize(max(width-2, 1), max(height-2, 1))
+
+	treePaneStyle := m.getEpicPaneBorderConfig(EpicFocusTree, width, height, "Epic")
+
+	var progressBar string
+	if m.epicTree.Root() != nil {
+		closed, total := m.epicTree.Root().CalculateProgress()
+		progressBar = renderCompactProgress(closed, total)
+	}
+
+	return zone.Mark(zoneEpicTree, panes.BorderedPane(panes.BorderConfig{
+		Content:            m.epicTree.View(),
+		Width:              treePaneStyle.width,
+		Height:             treePaneStyle.height,
+		TopLeft:            treePaneStyle.title,
+		TopRight:           progressBar,
+		HeaderAction:       m.headerAction(dashboardPaneEpicTree),
+		Focused:            treePaneStyle.focused,
+		TitleColor:         styles.OverlayTitleColor,
+		FocusedBorderColor: styles.BorderHighlightFocusColor,
+	}))
+}
+
+func (m Model) renderEpicDetailsPane(width, height int) string {
+	if m.hasEpicDetail {
+		m.epicDetails = m.epicDetails.SetSize(max(width-2, 1), max(height-2, 1))
+	}
+
+	detailsContent := renderEpicEmptyState("Select an issue to view details")
 	if m.hasEpicDetail {
 		detailsContent = m.epicDetails.View()
-	} else {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(colorDimmed).
-			Italic(true).
-			PaddingLeft(1)
-		detailsContent = emptyStyle.Render("Select an issue to view details")
 	}
-	detailsPaneStyle := m.getEpicPaneBorderConfig(EpicFocusDetails, layout.detailsWidth, height, "Details")
 
-	detailsPane := zone.Mark(zoneEpicDetails, panes.BorderedPane(panes.BorderConfig{
+	detailsPaneStyle := m.getEpicPaneBorderConfig(EpicFocusDetails, width, height, "Details")
+
+	return zone.Mark(zoneEpicDetails, panes.BorderedPane(panes.BorderConfig{
 		Content:            detailsContent,
 		Width:              detailsPaneStyle.width,
 		Height:             detailsPaneStyle.height,
 		TopLeft:            detailsPaneStyle.title,
+		HeaderAction:       m.headerAction(dashboardPaneEpicDetails),
 		Focused:            detailsPaneStyle.focused,
 		TitleColor:         styles.OverlayTitleColor,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	}))
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, treePane, detailsPane)
 }
 
 // epicPaneBorderConfig holds the configuration for a bordered pane in the epic section.

@@ -104,8 +104,8 @@ func TestBuildIssue_WithTimestamps(t *testing.T) {
 
 func TestBuildIssue_WithComments(t *testing.T) {
 	comments := []Comment{
-		{ID: 1, Author: "alice", Text: "First"},
-		{ID: 2, Author: "bob", Text: "Second"},
+		{ID: "1", Author: "alice", Text: "First"},
+		{ID: "2", Author: "bob", Text: "Second"},
 	}
 	issue := BuildIssue("bd-1", WithComments(comments...))
 

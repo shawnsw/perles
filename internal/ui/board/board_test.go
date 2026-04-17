@@ -3,6 +3,7 @@ package board
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,30 @@ func TestBoard_SetSize(t *testing.T) {
 	_ = m.SetSize(120, 40)
 	// SetSize modifies internal dimensions
 	// Verified through View output
+}
+
+func TestBoard_SetSize_StacksColumnsOnNarrowWidth(t *testing.T) {
+	m := NewFromViews(config.DefaultViews(), nil, nil).SetSize(80, 24)
+
+	for i := range m.ColCount() {
+		col := m.BoardColumn(i)
+		require.Equal(t, 80, col.Width())
+		require.Equal(t, 6, col.Height())
+	}
+}
+
+func TestBoard_View_NarrowWidthStacksColumns(t *testing.T) {
+	configs := []config.ColumnConfig{
+		{Name: "Ready", Query: "status = open"},
+		{Name: "Closed", Query: "status = closed"},
+	}
+
+	m := NewFromViews([]config.ViewConfig{{Name: "Test", Columns: configs}}, nil, nil).SetSize(40, 12)
+	view := m.View()
+
+	for _, line := range strings.Split(view, "\n") {
+		require.False(t, strings.Contains(line, "Ready") && strings.Contains(line, "Closed"))
+	}
 }
 
 func TestBoard_View(t *testing.T) {

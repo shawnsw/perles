@@ -226,3 +226,38 @@
   background: rgba(248, 81, 73, 0.1);
   border: 1px solid rgba(248, 81, 73, 0.3);
 }
+
+@media (max-width: 720px) {
+  .commands-header {
+    padding: 0.75rem;
+  }
+
+  .filter-buttons {
+    padding-left: 0;
+  }
+
+  .filter-label {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .command-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .command-duration {
+    margin-left: 0;
+  }
+
+  .command-detail {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding: 0.875rem;
+  }
+
+  .detail-section pre {
+    max-height: 280px;
+  }
+}

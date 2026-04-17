@@ -3,6 +3,7 @@ package dashboard
 import (
 	"errors"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/mock"
@@ -13,6 +14,8 @@ import (
 	"github.com/zjrosen/perles/internal/mode"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/task"
+	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/tree"
@@ -69,6 +72,49 @@ func createEpicTreeTestModel(t *testing.T) Model {
 	m = m.SetSize(100, 40).(Model)
 
 	return m
+}
+
+func createCommentReadyDashboardModel(t *testing.T, issue task.Issue) (Model, *mocks.MockTaskExecutor) {
+	t.Helper()
+
+	mockCP := newMockControlPlane(t)
+	mockCP.On("List", mock.Anything, mock.Anything).Return([]*controlplane.WorkflowInstance{}, nil).Maybe()
+
+	eventCh := make(chan controlplane.ControlPlaneEvent)
+	close(eventCh)
+	mockCP.On("Subscribe", mock.Anything).Return((<-chan controlplane.ControlPlaneEvent)(eventCh), func() {}).Maybe()
+
+	taskExec := mocks.NewMockTaskExecutor(t)
+	cfg := config.Defaults()
+
+	services := mode.Services{
+		TaskExecutor: taskExec,
+		Config:       &cfg,
+	}
+
+	dashCfg := Config{
+		ControlPlane: mockCP,
+		Services:     services,
+	}
+
+	m := New(dashCfg)
+	m = m.SetSize(100, 40).(Model)
+
+	issueMap := map[string]*task.Issue{
+		issue.ID: &issue,
+	}
+	m.epicTree = tree.New(issue.ID, issueMap, tree.DirectionDown, tree.ModeDeps, nil)
+	m.epicTree.SetSize(48, 18)
+	m.epicDetails = details.New(issue, nil, nil, taskExec).
+		SetMarkdownStyle(cfg.UI.MarkdownStyle).
+		SetHideFooter(true).
+		SetSize(48, 18)
+	m.hasEpicDetail = true
+	m.focus = FocusEpicView
+	m.epicViewFocus = EpicFocusDetails
+	m.lastLoadedEpicID = issue.ID
+
+	return m, taskExec
 }
 
 // === Unit Tests: loadEpicTree ===
@@ -1074,6 +1120,82 @@ func TestEditIssue_NoOpWithNoSelection(t *testing.T) {
 	// Verify modal is NOT opened (silent no-op)
 	require.Nil(t, m.issueEditor, "issue editor should remain nil when no node selected")
 	require.Nil(t, cmd, "should return nil command for silent no-op")
+}
+
+func TestCommentEditor_OpensFromDetailsFocus(t *testing.T) {
+	createdAt := time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+	issue := task.Issue{
+		ID:           "epic-123",
+		TitleText:    "Test Epic",
+		Type:         task.TypeEpic,
+		Priority:     task.PriorityMedium,
+		Status:       task.StatusOpen,
+		CreatedAt:    createdAt,
+		CommentCount: 1,
+		Comments: []task.Comment{
+			{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		},
+	}
+	m, _ := createCommentReadyDashboardModel(t, issue)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = result.(Model)
+
+	require.NotNil(t, m.commentEditor, "comment editor should open from details focus")
+	require.Nil(t, cmd, "comment editor init should return nil")
+}
+
+func TestCommentEditor_SaveMsg_RefreshesTreeAndDetails(t *testing.T) {
+	createdAt := time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+	issue := task.Issue{
+		ID:           "epic-123",
+		TitleText:    "Test Epic",
+		Type:         task.TypeEpic,
+		Priority:     task.PriorityMedium,
+		Status:       task.StatusOpen,
+		CreatedAt:    createdAt,
+		CommentCount: 1,
+		Comments: []task.Comment{
+			{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		},
+	}
+	m, taskExec := createCommentReadyDashboardModel(t, issue)
+
+	refreshed := issue
+	refreshed.CommentCount = 2
+	refreshed.Comments = nil
+
+	taskExec.EXPECT().AddComment("epic-123", "alice", "Ship it").Return(nil)
+	taskExec.EXPECT().ShowIssue("epic-123").Return(&refreshed, nil)
+	taskExec.EXPECT().GetComments("epic-123").Return([]task.Comment{
+		{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		{ID: "2", Author: "alice", Text: "Ship it", CreatedAt: createdAt.Add(time.Minute)},
+	}, nil)
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = result.(Model)
+	require.NotNil(t, m.commentEditor, "comment editor should be open")
+
+	result, cmd := m.Update(commenteditor.SaveMsg{IssueID: "epic-123", Author: "alice", Text: "Ship it"})
+	m = result.(Model)
+	require.Nil(t, m.commentEditor, "comment editor should close after save")
+	require.NotNil(t, cmd, "save should dispatch addCommentCmd")
+
+	msg := cmd()
+	result, toastCmd := m.Update(msg)
+	m = result.(Model)
+	require.NotNil(t, toastCmd)
+
+	node := m.epicTree.SelectedNode()
+	require.NotNil(t, node, "tree selection should remain valid")
+	require.Equal(t, 2, node.Issue.CommentCount)
+	require.Contains(t, m.epicDetails.View(), "Ship it")
+
+	toast := toastCmd()
+	showToast, ok := toast.(mode.ShowToastMsg)
+	require.True(t, ok)
+	require.Equal(t, "Comment added", showToast.Message)
+	require.Equal(t, toaster.StyleSuccess, showToast.Style)
 }
 
 // === Unit Tests: Workflow Switch and Resize Handling (perles-56ved.6) ===

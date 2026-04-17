@@ -70,8 +70,10 @@ func TestSQLiteReader_GetComments(t *testing.T) {
 	comments, err := reader.GetComments("TEST-1")
 	require.NoError(t, err)
 	require.Len(t, comments, 2)
+	require.Equal(t, "comment-1", comments[0].ID)
 	require.Equal(t, "alice", comments[0].Author)
 	require.Equal(t, "Investigating this bug", comments[0].Text)
+	require.Equal(t, "comment-2", comments[1].ID)
 	require.Equal(t, "bob", comments[1].Author)
 	require.Equal(t, "Found the root cause", comments[1].Text)
 
@@ -79,6 +81,7 @@ func TestSQLiteReader_GetComments(t *testing.T) {
 	comments, err = reader.GetComments("TEST-2")
 	require.NoError(t, err)
 	require.Len(t, comments, 1)
+	require.Equal(t, "comment-3", comments[0].ID)
 	require.Equal(t, "carol", comments[0].Author)
 }
 

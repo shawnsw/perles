@@ -117,6 +117,23 @@ func TestBorderedPane_DualTitles(t *testing.T) {
 	require.Contains(t, result, "Status", "missing bottom-right title")
 }
 
+func TestBorderedPane_HeaderAction(t *testing.T) {
+	cfg := BorderConfig{
+		Content: "content",
+		Width:   40,
+		Height:  5,
+		TopLeft: "Title",
+		HeaderAction: HeaderAction{
+			Label: "[+]",
+		},
+	}
+
+	result := BorderedPane(cfg)
+
+	require.Contains(t, result, "Title", "missing top-left title")
+	require.Contains(t, result, "[+]", "missing header action")
+}
+
 func TestBorderedPane_FocusedState(t *testing.T) {
 	cfgUnfocused := BorderConfig{
 		Content:            "content",
@@ -486,6 +503,21 @@ func TestBuildDualTitleTopBorder_TooNarrow(t *testing.T) {
 	// Should fall back to single title or plain border
 	require.Contains(t, result, "╭", "missing top-left corner")
 	require.Contains(t, result, "╮", "missing top-right corner")
+}
+
+func TestBuildDualTitleTopBorderWithAction(t *testing.T) {
+	borderStyle := lipgloss.NewStyle()
+	titleStyle := lipgloss.NewStyle()
+	actionStyle := lipgloss.NewStyle().Bold(true)
+
+	result := buildDualTitleTopBorderWithAction(
+		"Left", "Right", HeaderAction{Label: "[+]"},
+		36, borderStyle, titleStyle, actionStyle,
+	)
+
+	require.Contains(t, result, "Left", "missing left title")
+	require.Contains(t, result, "Right", "missing right title")
+	require.Contains(t, result, "[+]", "missing header action")
 }
 
 // =============================================================================
@@ -885,6 +917,27 @@ func TestBuildTabTitleTopBorder_ThreeTabs(t *testing.T) {
 	// Should contain border corners
 	require.Contains(t, result, "╭", "missing top-left corner")
 	require.Contains(t, result, "╮", "missing top-right corner")
+}
+
+func TestBuildTabTitleTopBorderWithAction(t *testing.T) {
+	borderStyle := lipgloss.NewStyle()
+	activeStyle := lipgloss.NewStyle().Bold(true)
+	inactiveStyle := lipgloss.NewStyle()
+	actionStyle := lipgloss.NewStyle().Bold(true)
+
+	tabs := []Tab{
+		{Label: "Overview"},
+		{Label: "Comments"},
+	}
+
+	result := buildTabTitleTopBorderWithAction(
+		tabs, 0, HeaderAction{Label: "[+]"},
+		44, borderStyle, activeStyle, inactiveStyle, actionStyle,
+	)
+
+	require.Contains(t, result, "Overview", "missing first tab label")
+	require.Contains(t, result, "Comments", "missing second tab label")
+	require.Contains(t, result, "[+]", "missing header action")
 }
 
 func TestBuildTabTitleTopBorder_SingleTab(t *testing.T) {

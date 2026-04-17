@@ -20,6 +20,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/orchestration/controlplane/mocks"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
+	fabricpersist "github.com/zjrosen/perles/internal/orchestration/fabric/persistence"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/repository"
 	"github.com/zjrosen/perles/internal/orchestration/session"
 	v2 "github.com/zjrosen/perles/internal/orchestration/v2"
@@ -40,6 +41,13 @@ func createTestMux(h *Handler) *http.ServeMux {
 func makeLoadSessionBody(t *testing.T, path string) string {
 	t.Helper()
 	body, err := json.Marshal(LoadSessionRequest{Path: path})
+	require.NoError(t, err)
+	return string(body)
+}
+
+func makeJSONBody(t *testing.T, value any) string {
+	t.Helper()
+	body, err := json.Marshal(value)
 	require.NoError(t, err)
 	return string(body)
 }
@@ -576,6 +584,37 @@ func newTestWorkflowWithFabric(t *testing.T, state controlplane.WorkflowState) *
 	}
 }
 
+func seedPersistedFabricSession(t *testing.T) (string, string) {
+	t.Helper()
+
+	sessionBase := t.TempDir()
+	sessionDir := filepath.Join(sessionBase, "app", "2026-04-16", "session-123")
+	require.NoError(t, os.MkdirAll(sessionDir, 0750))
+
+	threadRepo := repository.NewMemoryThreadRepository()
+	depRepo := repository.NewMemoryDependencyRepository()
+	subRepo := repository.NewMemorySubscriptionRepository()
+	ackRepo := repository.NewMemoryAckRepository(depRepo, threadRepo, subRepo)
+	participantRepo := repository.NewMemoryParticipantRepository()
+
+	svc := fabric.NewService(threadRepo, depRepo, subRepo, ackRepo, participantRepo)
+	logger, err := fabricpersist.NewEventLogger(sessionDir)
+	require.NoError(t, err)
+	svc.SetEventHandler(logger.HandleEvent)
+
+	require.NoError(t, svc.InitSession("coordinator"))
+
+	msg, err := svc.SendMessage(fabric.SendMessageInput{
+		ChannelSlug: "tasks",
+		Content:     "Seed task thread",
+		CreatedBy:   "coordinator",
+	})
+	require.NoError(t, err)
+	require.NoError(t, logger.Close())
+
+	return sessionBase, msg.ID
+}
+
 // === SendMessage Tests ===
 
 func TestHandler_SendMessage_Success(t *testing.T) {
@@ -668,6 +707,36 @@ func TestHandler_SendMessage_WorkflowNotFound(t *testing.T) {
 	assert.Equal(t, "not_found", resp.Code)
 }
 
+func TestHandler_SendMessage_ArchivedSessionFallback(t *testing.T) {
+	sessionBase, _ := seedPersistedFabricSession(t)
+	sessionDir := filepath.Join(sessionBase, "app", "2026-04-16", "session-123")
+
+	h := NewHandler(sessionBase, createTestFS(), nil)
+	mux := createTestMux(h)
+
+	body := makeJSONBody(t, SendMessageRequest{
+		SessionPath: sessionDir,
+		ChannelSlug: "tasks",
+		Content:     "Archived comment",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/fabric/send-message", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	events, err := fabricpersist.LoadPersistedEvents(sessionDir)
+	require.NoError(t, err)
+	require.NotEmpty(t, events)
+	lastEvent := events[len(events)-1]
+	assert.Equal(t, fabric.EventMessagePosted, lastEvent.Event.Type)
+	if assert.NotNil(t, lastEvent.Event.Thread) {
+		assert.Equal(t, "Archived comment", lastEvent.Event.Thread.Content)
+		assert.Equal(t, "user", lastEvent.Event.Thread.CreatedBy)
+	}
+}
+
 // === Reply Tests ===
 
 func TestHandler_Reply_Success(t *testing.T) {
@@ -725,6 +794,37 @@ func TestHandler_Reply_ThreadNotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "not_found", resp.Code)
 	assert.Contains(t, resp.Error, "Thread not found")
+}
+
+func TestHandler_Reply_ArchivedSessionFallback(t *testing.T) {
+	sessionBase, threadID := seedPersistedFabricSession(t)
+	sessionDir := filepath.Join(sessionBase, "app", "2026-04-16", "session-123")
+
+	h := NewHandler(sessionBase, createTestFS(), nil)
+	mux := createTestMux(h)
+
+	body := makeJSONBody(t, ReplyRequest{
+		SessionPath: sessionDir,
+		ThreadID:    threadID,
+		Content:     "Archived reply",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/fabric/reply", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	events, err := fabricpersist.LoadPersistedEvents(sessionDir)
+	require.NoError(t, err)
+	require.NotEmpty(t, events)
+	lastEvent := events[len(events)-1]
+	assert.Equal(t, fabric.EventReplyPosted, lastEvent.Event.Type)
+	assert.Equal(t, threadID, lastEvent.Event.ParentID)
+	if assert.NotNil(t, lastEvent.Event.Thread) {
+		assert.Equal(t, "Archived reply", lastEvent.Event.Thread.Content)
+		assert.Equal(t, "user", lastEvent.Event.Thread.CreatedBy)
+	}
 }
 
 // === ListAgents Tests ===
@@ -847,6 +947,33 @@ func TestHandler_ListAgents_NoControlPlane(t *testing.T) {
 
 	assert.False(t, resp.IsActive)
 	assert.Empty(t, resp.Agents)
+}
+
+func TestHandler_ListAgents_FallsBackToSessionPath(t *testing.T) {
+	sessionBase, _ := seedPersistedFabricSession(t)
+	sessionDir := filepath.Join(sessionBase, "app", "2026-04-16", "session-123")
+
+	h := NewHandler(sessionBase, createTestFS(), nil)
+	mux := createTestMux(h)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/fabric/agents?sessionPath="+sessionDir,
+		nil,
+	)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp AgentsResponse
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.False(t, resp.IsActive)
+	assert.NotEmpty(t, resp.Agents)
+	assert.Equal(t, "coordinator", resp.Agents[0].ID)
 }
 
 // === ReadFile Endpoint Tests ===

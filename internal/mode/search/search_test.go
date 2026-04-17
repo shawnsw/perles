@@ -2,9 +2,11 @@ package search
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/stretchr/testify/mock"
@@ -16,6 +18,7 @@ import (
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
@@ -61,6 +64,35 @@ func createTestModelWithResults(t *testing.T) Model {
 	return m
 }
 
+func createCommentReadySearchModel(t *testing.T, issue task.Issue) (Model, *mocks.MockTaskExecutor) {
+	t.Helper()
+
+	cfg := config.Defaults()
+	clipboard := mocks.NewMockClipboard(t)
+	clipboard.EXPECT().Copy(mock.Anything).Return(nil).Maybe()
+
+	taskExec := mocks.NewMockTaskExecutor(t)
+	services := mode.Services{
+		TaskExecutor: taskExec,
+		Config:       &cfg,
+		Clipboard:    clipboard,
+	}
+
+	m := New(services)
+	m.width = 100
+	m.height = 40
+	m.results = []task.Issue{issue}
+	m.selectedIdx = 0
+	m.resultsList.SetItems([]list.Item{issueItem{issue: issue}})
+	m.resultsList.Select(0)
+	m.details = details.New(issue, nil, nil, taskExec).
+		SetMarkdownStyle(cfg.UI.MarkdownStyle).
+		SetSize(49, 38)
+	m.hasDetail = true
+
+	return m, taskExec
+}
+
 func TestSearch_New(t *testing.T) {
 	m := createTestModel(t)
 
@@ -77,6 +109,16 @@ func TestSearch_SetSize(t *testing.T) {
 
 	require.Equal(t, 120, m.width, "width should be updated")
 	require.Equal(t, 50, m.height, "height should be updated")
+}
+
+func TestSearch_RenderMainView_NarrowWidth_StacksPanels(t *testing.T) {
+	m := createTestModelWithResults(t)
+	m = m.SetSize(80, 24)
+
+	view := m.renderMainView()
+	for _, line := range strings.Split(view, "\n") {
+		require.False(t, strings.Contains(line, "BQL Search") && strings.Contains(line, "Issue Details"))
+	}
 }
 
 func TestSearch_SetSize_ZeroGuard(t *testing.T) {
@@ -1696,6 +1738,110 @@ func TestSearch_IssueEditor_CancelMsg_ClearsSelectedIssue(t *testing.T) {
 	require.Equal(t, ViewSearch, m.view, "expected ViewSearch view after cancel")
 	require.Nil(t, cmd, "expected no command on cancel")
 	require.Nil(t, m.selectedIssue, "selectedIssue should be cleared after cancel")
+}
+
+func TestSearch_CommentEditor_OpenCommentModalMsg_SetsViewAddComment(t *testing.T) {
+	createdAt := time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+	issue := task.Issue{
+		ID:           "test-1",
+		TitleText:    "First Issue",
+		Type:         task.TypeTask,
+		Priority:     task.PriorityMedium,
+		Status:       task.StatusOpen,
+		CreatedAt:    createdAt,
+		CommentCount: 1,
+		Comments: []task.Comment{
+			{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		},
+	}
+	m, _ := createCommentReadySearchModel(t, issue)
+
+	m, _ = m.Update(details.OpenCommentModalMsg{Issue: issue})
+
+	require.Equal(t, ViewAddComment, m.view)
+	require.Contains(t, m.View(), "Add Comment")
+}
+
+func TestSearch_CommentEditor_SaveMsg_RefreshesResultsAndDetails(t *testing.T) {
+	createdAt := time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+	issue := task.Issue{
+		ID:           "test-1",
+		TitleText:    "First Issue",
+		Type:         task.TypeTask,
+		Priority:     task.PriorityMedium,
+		Status:       task.StatusOpen,
+		CreatedAt:    createdAt,
+		CommentCount: 1,
+		Comments: []task.Comment{
+			{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		},
+	}
+	m, taskExec := createCommentReadySearchModel(t, issue)
+
+	refreshed := issue
+	refreshed.CommentCount = 2
+	refreshed.Comments = nil
+
+	taskExec.EXPECT().AddComment("test-1", "alice", "Ship it").Return(nil)
+	taskExec.EXPECT().ShowIssue("test-1").Return(&refreshed, nil)
+	taskExec.EXPECT().GetComments("test-1").Return([]task.Comment{
+		{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		{ID: "2", Author: "alice", Text: "Ship it", CreatedAt: createdAt.Add(time.Minute)},
+	}, nil)
+
+	m, _ = m.Update(details.OpenCommentModalMsg{Issue: issue})
+	require.Equal(t, ViewAddComment, m.view)
+
+	m, cmd := m.Update(commenteditor.SaveMsg{IssueID: "test-1", Author: "alice", Text: "Ship it"})
+	require.Equal(t, ViewSearch, m.view)
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	m, toastCmd := m.Update(msg)
+	require.Equal(t, 2, m.results[0].CommentCount)
+	require.Contains(t, m.details.View(), "Ship it")
+	require.NotNil(t, toastCmd)
+
+	toast := toastCmd()
+	showToast, ok := toast.(mode.ShowToastMsg)
+	require.True(t, ok)
+	require.Equal(t, "Comment added", showToast.Message)
+	require.Equal(t, toaster.StyleSuccess, showToast.Style)
+}
+
+func TestSearch_CommentEditor_SaveMsg_ErrorShowsToast(t *testing.T) {
+	createdAt := time.Date(2026, time.January, 2, 15, 4, 5, 0, time.UTC)
+	issue := task.Issue{
+		ID:           "test-1",
+		TitleText:    "First Issue",
+		Type:         task.TypeTask,
+		Priority:     task.PriorityMedium,
+		Status:       task.StatusOpen,
+		CreatedAt:    createdAt,
+		CommentCount: 1,
+		Comments: []task.Comment{
+			{ID: "1", Author: "bob", Text: "Existing", CreatedAt: createdAt},
+		},
+	}
+	m, taskExec := createCommentReadySearchModel(t, issue)
+
+	taskExec.EXPECT().AddComment("test-1", "alice", "Ship it").Return(errors.New("bd unavailable"))
+
+	m, _ = m.Update(details.OpenCommentModalMsg{Issue: issue})
+	m, cmd := m.Update(commenteditor.SaveMsg{IssueID: "test-1", Author: "alice", Text: "Ship it"})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	m, toastCmd := m.Update(msg)
+	require.Equal(t, 1, m.results[0].CommentCount)
+	require.NotNil(t, toastCmd)
+
+	toast := toastCmd()
+	showToast, ok := toast.(mode.ShowToastMsg)
+	require.True(t, ok)
+	require.Contains(t, showToast.Message, "Comment failed")
+	require.Contains(t, showToast.Message, "bd unavailable")
+	require.Equal(t, toaster.StyleError, showToast.Style)
 }
 
 // =============================================================================

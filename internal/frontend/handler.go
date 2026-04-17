@@ -18,6 +18,8 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/orchestration/fabric"
 	"github.com/zjrosen/perles/internal/orchestration/fabric/domain"
+	fabricpersist "github.com/zjrosen/perles/internal/orchestration/fabric/persistence"
+	fabricrepo "github.com/zjrosen/perles/internal/orchestration/fabric/repository"
 	"github.com/zjrosen/perles/internal/orchestration/session"
 )
 
@@ -26,6 +28,8 @@ const maxLineSize = 1024 * 1024
 
 // maxContentLength is the maximum allowed content length for fabric messages (10,000 chars).
 const maxContentLength = 10000
+
+var errWorkflowInactive = errors.New("workflow is not active")
 
 // Handler provides HTTP endpoints for the session viewer frontend.
 type Handler struct {
@@ -501,6 +505,20 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON body", err.Error())
 		return
 	}
+	if strings.TrimSpace(req.ChannelSlug) == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "channelSlug is required", "")
+		return
+	}
+	if req.WorkflowID == "" && req.SessionPath == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "workflowId or sessionPath is required", "")
+		return
+	}
+	if req.SessionPath != "" {
+		if err := h.validateSessionPath(req.SessionPath); err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), "")
+			return
+		}
+	}
 
 	// Validate content
 	if err := h.validateContent(req.Content); err != nil {
@@ -508,15 +526,22 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get workflow and fabric service
-	fabricSvc, err := h.getFabricService(r.Context(), req.WorkflowID)
+	// Prefer the live workflow when it's still active; otherwise fall back to
+	// appending directly to the persisted session so archived sessions remain commentable.
+	fabricSvc, cleanup, err := h.resolveWriteFabricService(r.Context(), req.WorkflowID, req.SessionPath)
 	if err != nil {
-		if errors.Is(err, controlplane.ErrWorkflowNotFound) {
+		switch {
+		case errors.Is(err, controlplane.ErrWorkflowNotFound):
 			h.writeError(w, http.StatusNotFound, "not_found", "Workflow not found", req.WorkflowID)
-			return
+		case errors.Is(err, errWorkflowInactive):
+			h.writeError(w, http.StatusConflict, "workflow_inactive", "Workflow is not active", req.WorkflowID)
+		default:
+			h.writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Fabric service unavailable", err.Error())
 		}
-		h.writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Fabric service unavailable", err.Error())
 		return
+	}
+	if cleanup != nil {
+		defer func() { _ = cleanup() }()
 	}
 
 	// Send message
@@ -528,6 +553,10 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		Mentions:    req.Mentions,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "channel") {
+			h.writeError(w, http.StatusNotFound, "not_found", "Channel not found", req.ChannelSlug)
+			return
+		}
 		h.writeError(w, http.StatusInternalServerError, "send_failed", "Failed to send message", err.Error())
 		return
 	}
@@ -546,6 +575,20 @@ func (h *Handler) Reply(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "invalid_json", "Invalid JSON body", err.Error())
 		return
 	}
+	if strings.TrimSpace(req.ThreadID) == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "threadId is required", "")
+		return
+	}
+	if req.WorkflowID == "" && req.SessionPath == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "workflowId or sessionPath is required", "")
+		return
+	}
+	if req.SessionPath != "" {
+		if err := h.validateSessionPath(req.SessionPath); err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), "")
+			return
+		}
+	}
 
 	// Validate content
 	if err := h.validateContent(req.Content); err != nil {
@@ -553,15 +596,22 @@ func (h *Handler) Reply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get workflow and fabric service
-	fabricSvc, err := h.getFabricService(r.Context(), req.WorkflowID)
+	// Prefer the live workflow when it's still active; otherwise fall back to
+	// appending directly to the persisted session so archived sessions remain commentable.
+	fabricSvc, cleanup, err := h.resolveWriteFabricService(r.Context(), req.WorkflowID, req.SessionPath)
 	if err != nil {
-		if errors.Is(err, controlplane.ErrWorkflowNotFound) {
+		switch {
+		case errors.Is(err, controlplane.ErrWorkflowNotFound):
 			h.writeError(w, http.StatusNotFound, "not_found", "Workflow not found", req.WorkflowID)
-			return
+		case errors.Is(err, errWorkflowInactive):
+			h.writeError(w, http.StatusConflict, "workflow_inactive", "Workflow is not active", req.WorkflowID)
+		default:
+			h.writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Fabric service unavailable", err.Error())
 		}
-		h.writeError(w, http.StatusServiceUnavailable, "service_unavailable", "Fabric service unavailable", err.Error())
 		return
+	}
+	if cleanup != nil {
+		defer func() { _ = cleanup() }()
 	}
 
 	// Reply to message
@@ -640,57 +690,73 @@ func (h *Handler) React(w http.ResponseWriter, r *http.Request) {
 // GET /api/fabric/agents?workflowId=...
 func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	workflowID := r.URL.Query().Get("workflowId")
-	if workflowID == "" {
-		h.writeError(w, http.StatusBadRequest, "validation_error", "workflowId query parameter is required", "")
+	sessionPath := r.URL.Query().Get("sessionPath")
+	if workflowID == "" && sessionPath == "" {
+		h.writeError(w, http.StatusBadRequest, "validation_error", "workflowId or sessionPath query parameter is required", "")
 		return
 	}
+	if workflowID != "" && h.controlPlane != nil {
+		wf, err := h.controlPlane.Get(r.Context(), controlplane.WorkflowID(workflowID))
+		if err == nil {
+			// Determine if workflow is active
+			isActive := wf.State == controlplane.WorkflowRunning || wf.State == controlplane.WorkflowPaused
 
-	// Check if ControlPlane is available
-	if h.controlPlane == nil {
+			// Get agents from process repository
+			agents := []Agent{}
+			if wf.Infrastructure != nil {
+				// Add coordinator
+				if coord, err := wf.Infrastructure.Repositories.ProcessRepo.GetCoordinator(); err == nil {
+					agents = append(agents, Agent{
+						ID:   coord.ID,
+						Role: "coordinator",
+					})
+				}
+
+				// Add workers
+				for _, worker := range wf.Infrastructure.Repositories.ProcessRepo.Workers() {
+					agents = append(agents, Agent{
+						ID:   worker.ID,
+						Role: "worker",
+					})
+				}
+			}
+
+			h.writeJSON(w, http.StatusOK, AgentsResponse{
+				Agents:   agents,
+				IsActive: isActive,
+			})
+			return
+		}
+		if errors.Is(err, controlplane.ErrWorkflowNotFound) && sessionPath == "" {
+			h.writeError(w, http.StatusNotFound, "not_found", "Workflow not found", workflowID)
+			return
+		}
+		if !errors.Is(err, controlplane.ErrWorkflowNotFound) && sessionPath == "" {
+			h.writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get workflow", err.Error())
+			return
+		}
+	}
+
+	if sessionPath != "" {
+		if err := h.validateSessionPath(sessionPath); err != nil {
+			h.writeError(w, http.StatusBadRequest, "invalid_path", err.Error(), "")
+			return
+		}
+		agents, err := h.loadSessionAgents(sessionPath)
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "load_failed", "Failed to load session agents", err.Error())
+			return
+		}
 		h.writeJSON(w, http.StatusOK, AgentsResponse{
-			Agents:   []Agent{},
+			Agents:   agents,
 			IsActive: false,
 		})
 		return
 	}
 
-	// Get workflow
-	wf, err := h.controlPlane.Get(r.Context(), controlplane.WorkflowID(workflowID))
-	if err != nil {
-		if errors.Is(err, controlplane.ErrWorkflowNotFound) {
-			h.writeError(w, http.StatusNotFound, "not_found", "Workflow not found", workflowID)
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "get_failed", "Failed to get workflow", err.Error())
-		return
-	}
-
-	// Determine if workflow is active
-	isActive := wf.State == controlplane.WorkflowRunning || wf.State == controlplane.WorkflowPaused
-
-	// Get agents from process repository
-	agents := []Agent{}
-	if wf.Infrastructure != nil {
-		// Add coordinator
-		if coord, err := wf.Infrastructure.Repositories.ProcessRepo.GetCoordinator(); err == nil {
-			agents = append(agents, Agent{
-				ID:   coord.ID,
-				Role: "coordinator",
-			})
-		}
-
-		// Add workers
-		for _, worker := range wf.Infrastructure.Repositories.ProcessRepo.Workers() {
-			agents = append(agents, Agent{
-				ID:   worker.ID,
-				Role: "worker",
-			})
-		}
-	}
-
 	h.writeJSON(w, http.StatusOK, AgentsResponse{
-		Agents:   agents,
-		IsActive: isActive,
+		Agents:   []Agent{},
+		IsActive: false,
 	})
 }
 
@@ -726,6 +792,156 @@ func (h *Handler) getFabricService(ctx context.Context, workflowID string) (*fab
 	}
 
 	return wf.Infrastructure.Core.FabricService, nil
+}
+
+func (h *Handler) resolveWriteFabricService(
+	ctx context.Context,
+	workflowID, sessionPath string,
+) (*fabric.Service, func() error, error) {
+	var workflowErr error
+
+	if workflowID != "" {
+		wf, err := h.getWorkflow(ctx, workflowID)
+		if err == nil {
+			isActive := wf.State == controlplane.WorkflowRunning || wf.State == controlplane.WorkflowPaused
+			if isActive {
+				if wf.Infrastructure == nil || wf.Infrastructure.Core.FabricService == nil {
+					return nil, nil, fmt.Errorf("fabric service not available")
+				}
+				return wf.Infrastructure.Core.FabricService, nil, nil
+			}
+			workflowErr = errWorkflowInactive
+		}
+		if err != nil {
+			workflowErr = err
+		}
+	}
+
+	if sessionPath != "" {
+		return h.openArchivedFabricService(sessionPath)
+	}
+	if workflowErr != nil {
+		return nil, nil, workflowErr
+	}
+	return nil, nil, fmt.Errorf("workflowId or sessionPath is required")
+}
+
+func (h *Handler) getWorkflow(ctx context.Context, workflowID string) (*controlplane.WorkflowInstance, error) {
+	if h.controlPlane == nil {
+		return nil, fmt.Errorf("control plane not available")
+	}
+	return h.controlPlane.Get(ctx, controlplane.WorkflowID(workflowID))
+}
+
+func (h *Handler) openArchivedFabricService(sessionPath string) (*fabric.Service, func() error, error) {
+	if err := h.validateSessionPath(sessionPath); err != nil {
+		return nil, nil, err
+	}
+
+	events, err := fabricpersist.LoadPersistedEvents(sessionPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("loading persisted fabric events: %w", err)
+	}
+
+	threadRepo := fabricrepo.NewMemoryThreadRepository()
+	depRepo := fabricrepo.NewMemoryDependencyRepository()
+	subRepo := fabricrepo.NewMemorySubscriptionRepository()
+	participantRepo := fabricrepo.NewMemoryParticipantRepository()
+	ackRepo := fabricrepo.NewMemoryAckRepository(depRepo, threadRepo, subRepo)
+	ackRepo.SetParticipantRepository(participantRepo)
+	reactionRepo := fabricrepo.NewInMemoryReactionRepository()
+
+	if err := fabricpersist.RestoreFabricState(events, threadRepo, depRepo, subRepo, ackRepo, participantRepo, reactionRepo); err != nil {
+		return nil, nil, fmt.Errorf("restoring archived fabric state: %w", err)
+	}
+
+	svc := fabric.NewService(threadRepo, depRepo, subRepo, ackRepo, participantRepo)
+	if err := svc.RestoreChannelIDs(); err != nil {
+		return nil, nil, fmt.Errorf("restoring channel IDs: %w", err)
+	}
+
+	logger, err := fabricpersist.NewEventLogger(sessionPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("opening archived fabric logger: %w", err)
+	}
+	svc.SetEventHandler(logger.HandleEvent)
+
+	return svc, logger.Close, nil
+}
+
+func (h *Handler) loadSessionAgents(sessionPath string) ([]Agent, error) {
+	events, err := fabricpersist.LoadPersistedEvents(sessionPath)
+	if err != nil {
+		return nil, err
+	}
+
+	agentsByID := make(map[string]Agent)
+	recordAgent := func(id, role string) {
+		id = strings.TrimSpace(id)
+		if id == "" || id == domain.AgentUser {
+			return
+		}
+		existing, ok := agentsByID[id]
+		if !ok {
+			agentsByID[id] = Agent{ID: id, Role: role}
+			return
+		}
+		if existing.Role == "" || existing.Role == "worker" {
+			existing.Role = role
+			agentsByID[id] = existing
+		}
+	}
+
+	for _, pe := range events {
+		event := pe.Event
+		if event.Participant != nil {
+			recordAgent(event.Participant.AgentID, string(event.Participant.Role))
+		}
+		if event.AgentID != "" {
+			recordAgent(event.AgentID, inferAgentRole(event.AgentID))
+		}
+		if event.Thread != nil {
+			recordAgent(event.Thread.CreatedBy, inferAgentRole(event.Thread.CreatedBy))
+		}
+	}
+
+	agents := make([]Agent, 0, len(agentsByID))
+	for _, agent := range agentsByID {
+		agents = append(agents, agent)
+	}
+	sort.Slice(agents, func(i, j int) bool {
+		leftRank := agentRoleRank(agents[i].Role)
+		rightRank := agentRoleRank(agents[j].Role)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return agents[i].ID < agents[j].ID
+	})
+	return agents, nil
+}
+
+func inferAgentRole(agentID string) string {
+	switch agentID {
+	case "coordinator":
+		return "coordinator"
+	case "observer":
+		return "observer"
+	default:
+		return "worker"
+	}
+}
+
+func agentRoleRank(role string) int {
+	switch role {
+	case "coordinator":
+		return 0
+	case "observer":
+		return 1
+	case "worker":
+		return 2
+	default:
+		return 3
+	}
 }
 
 // ReadFile reads a file from the filesystem and returns its contents.

@@ -41,6 +41,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/zjrosen/perles/internal/ui/shared/panes"
 )
 
 // ColumnType identifies the semantic type of column content.
@@ -161,6 +163,7 @@ type TableConfig struct {
 	BorderColor        lipgloss.TerminalColor // Border color override
 	Focused            bool                   // Whether the table has focus (affects border color)
 	FocusedBorderColor lipgloss.TerminalColor // Border color when focused
+	HeaderAction       panes.HeaderAction     // Optional clickable action in the top-right border
 }
 
 // ValidateConfig validates the table configuration.

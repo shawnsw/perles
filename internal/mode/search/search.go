@@ -21,6 +21,7 @@ import (
 	"github.com/zjrosen/perles/internal/mode/shared"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/help"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/colorpicker"
@@ -56,8 +57,33 @@ const (
 	ViewSaveAction    // Action picker: existing vs new view
 	ViewNewView       // New view modal
 	ViewDeleteConfirm // Delete issue confirmation modal
+	ViewAddComment    // Add comment modal
 	ViewEditIssue     // Unified issue editor modal
 )
+
+type searchPane int
+
+const (
+	searchPaneNone searchPane = iota
+	searchPaneInput
+	searchPaneResults
+	searchPaneTree
+	searchPaneDetails
+)
+
+const (
+	minHorizontalPaneWidth = 48
+	mainPaneGap            = 1
+)
+
+type mainPaneLayout struct {
+	stacked     bool
+	leftWidth   int
+	rightWidth  int
+	leftHeight  int
+	rightHeight int
+	gap         int
+}
 
 // Model holds the search mode state.
 type Model struct {
@@ -91,6 +117,7 @@ type Model struct {
 	viewSelector  formmodal.Model
 	newViewModal  formmodal.Model
 	modal         modal.Model
+	commentEditor commenteditor.Model
 	issueEditor   issueeditor.Model // Unified issue editor modal
 
 	// Delete operation state
@@ -100,8 +127,9 @@ type Model struct {
 	focus FocusPane
 
 	// Layout
-	width  int
-	height int
+	width         int
+	height        int
+	maximizedPane searchPane
 
 	// User-defined actions (key -> action config)
 	actions map[string]config.ActionConfig
@@ -521,20 +549,32 @@ func (m Model) handleEnter(msg EnterMsg) (Model, tea.Cmd) {
 	if msg.SubMode == mode.SubModeTree {
 		// Tree sub-mode: show dependency/child tree for an issue
 		m.subMode = mode.SubModeTree
+		if m.maximizedPane == searchPaneInput || m.maximizedPane == searchPaneResults {
+			m.maximizedPane = searchPaneNone
+		}
 		m.focus = FocusResults // Focus tree panel
 		m.tree = nil           // Clear old tree so handleTreeLoaded doesn't preserve stale selection
 		m.treeRoot = &task.Issue{ID: msg.IssueID}
+		if m.width > 0 && m.height > 0 {
+			m = m.SetSize(m.width, m.height)
+		}
 		return m, m.loadTree(msg.IssueID)
 	}
 
 	// List sub-mode: BQL search
 	m.subMode = mode.SubModeList
+	if m.maximizedPane == searchPaneTree {
+		m.maximizedPane = searchPaneNone
+	}
 	m.focus = FocusSearch // Focus search input
 	m.input.Focus()
 	m.input.SetValue(msg.Query)
 	// Clear tree state from any previous tree sub-mode usage
 	m.tree = nil
 	m.treeRoot = nil
+	if m.width > 0 && m.height > 0 {
+		m = m.SetSize(m.width, m.height)
+	}
 	return m, m.executeSearch()
 }
 
@@ -548,23 +588,21 @@ func (m Model) SetSize(width, height int) Model {
 		return m
 	}
 
-	// Calculate 50/50 split
-	leftWidth := width / 2
-	rightWidth := width - leftWidth - 1 // -1 for divider
-
 	// Update input size (vimtextarea uses SetSize for width/height)
-	inputWidth := max(leftWidth-4, 1) // Padding
-	inputHeight := 3                  // Max lines for input
+	inputWidth, _ := m.inputPaneSize()
+	inputHeight := 3
 	m.input.SetSize(inputWidth, inputHeight)
 
 	// Update results list
-	listHeight := max(height-5, 1) // Input row + header + status + borders
-	listWidth := max(leftWidth-2, 1)
+	resultsWidth, resultsHeight := m.resultsPaneSize()
+	listHeight := max(resultsHeight-2, 1)
+	listWidth := max(resultsWidth-2, 1)
 	m.resultsList.SetSize(listWidth, listHeight)
 
 	// Update details panel (height-2 accounts for top/bottom border)
 	if m.hasDetail {
-		m.details = m.details.SetSize(rightWidth-2, height-2)
+		detailsWidth, detailsHeight := m.detailsPaneSize()
+		m.details = m.details.SetSize(max(detailsWidth-2, 1), max(detailsHeight-2, 1))
 	}
 
 	// Update help
@@ -572,11 +610,130 @@ func (m Model) SetSize(width, height int) Model {
 
 	// Update tree model if present (tree sub-mode)
 	if m.tree != nil {
-		// Tree height accounts for: borders (2)
-		treeHeight := max(height-2, 1)
-		m.tree.SetSize(leftWidth-2, treeHeight) // -2 for border
+		treeWidth, treeHeight := m.treePaneSize()
+		m.tree.SetSize(max(treeWidth-2, 1), max(treeHeight-2, 1))
 	}
 
+	if m.view == ViewAddComment {
+		m.commentEditor = m.commentEditor.SetSize(width, height)
+	}
+	if m.view == ViewEditIssue {
+		m.issueEditor = m.issueEditor.SetSize(width, height)
+	}
+
+	return m
+}
+
+func (m Model) useStackedLayout() bool {
+	return m.width/2 < minHorizontalPaneWidth
+}
+
+func (m Model) mainPaneLayout() mainPaneLayout {
+	layout := mainPaneLayout{gap: mainPaneGap}
+	if m.useStackedLayout() {
+		layout.stacked = true
+		layout.leftWidth = m.width
+		layout.rightWidth = m.width
+		layout.leftHeight = max((m.height-layout.gap)/2, 1)
+		layout.rightHeight = max(m.height-layout.leftHeight-layout.gap, 1)
+		return layout
+	}
+
+	layout.leftWidth = m.width / 2
+	layout.rightWidth = m.width - layout.leftWidth - layout.gap
+	layout.leftHeight = m.height
+	layout.rightHeight = m.height
+	return layout
+}
+
+func (m Model) effectiveMaximizedPane() searchPane {
+	switch m.maximizedPane {
+	case searchPaneInput, searchPaneResults:
+		if m.subMode != mode.SubModeList {
+			return searchPaneNone
+		}
+	case searchPaneTree:
+		if m.subMode != mode.SubModeTree {
+			return searchPaneNone
+		}
+	case searchPaneDetails, searchPaneNone:
+		// Always valid.
+	default:
+		return searchPaneNone
+	}
+	return m.maximizedPane
+}
+
+func (m Model) inputPanelHeight() int {
+	return min(m.input.TotalDisplayLines(), 3) + 2
+}
+
+func (m Model) inputPaneSize() (int, int) {
+	if m.effectiveMaximizedPane() == searchPaneInput {
+		return max(m.width-4, 1), m.height
+	}
+	layout := m.mainPaneLayout()
+	return max(layout.leftWidth-4, 1), m.inputPanelHeight()
+}
+
+func (m Model) resultsPaneSize() (int, int) {
+	if m.effectiveMaximizedPane() == searchPaneResults {
+		return m.width, m.height
+	}
+	layout := m.mainPaneLayout()
+	return layout.leftWidth, max(layout.leftHeight-m.inputPanelHeight(), 1)
+}
+
+func (m Model) treePaneSize() (int, int) {
+	if m.effectiveMaximizedPane() == searchPaneTree {
+		return m.width, m.height
+	}
+	layout := m.mainPaneLayout()
+	return layout.leftWidth, layout.leftHeight
+}
+
+func (m Model) detailsPaneSize() (int, int) {
+	if m.effectiveMaximizedPane() == searchPaneDetails {
+		return m.width, m.height
+	}
+	layout := m.mainPaneLayout()
+	return layout.rightWidth, layout.rightHeight
+}
+
+func (m Model) headerAction(pane searchPane) panes.HeaderAction {
+	label := "[+]"
+	if m.effectiveMaximizedPane() == pane {
+		label = "[-]"
+	}
+	return panes.HeaderAction{
+		Label:  label,
+		ZoneID: makeSearchPaneActionZoneID(pane),
+	}
+}
+
+func (m Model) toggleMaximizedPane(pane searchPane) Model {
+	if m.effectiveMaximizedPane() == pane {
+		m.maximizedPane = searchPaneNone
+	} else {
+		m.maximizedPane = pane
+	}
+
+	switch pane {
+	case searchPaneInput:
+		m.focus = FocusSearch
+		m.input.Focus()
+		m.showSearchErr = false
+	case searchPaneResults, searchPaneTree:
+		m.focus = FocusResults
+		m.input.Blur()
+	case searchPaneDetails:
+		m.focus = FocusDetails
+		m.input.Blur()
+	}
+
+	if m.width > 0 && m.height > 0 {
+		m = m.SetSize(m.width, m.height)
+	}
 	return m
 }
 
@@ -589,6 +746,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	// Handle mouse messages - route to appropriate component
 	if mouseMsg, ok := msg.(tea.MouseMsg); ok {
+		if m.view == ViewAddComment {
+			var cmd tea.Cmd
+			m.commentEditor, cmd = m.commentEditor.Update(mouseMsg)
+			return m, cmd
+		}
 		// When issue editor is open, forward mouse events to it
 		if m.view == ViewEditIssue {
 			var cmd tea.Cmd
@@ -628,6 +790,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case details.NavigateToDependencyMsg:
 		return m.navigateToDependency(msg.IssueID)
+
+	case commentAddedMsg:
+		return m.handleCommentAdded(msg)
 
 	case issueSavedMsg:
 		return m.handleIssueSaved(msg)
@@ -746,6 +911,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case details.DeleteIssueMsg:
 		return m.openDeleteConfirm(msg)
 
+	case details.OpenCommentModalMsg:
+		m.commentEditor = commenteditor.NewWithVimMode(msg.Issue, m.services.Config.UI.VimMode).
+			SetSize(m.width, m.height)
+		m.view = ViewAddComment
+		return m, m.commentEditor.Init()
+
 	case details.OpenEditMenuMsg:
 		issue := msg.Issue
 		m.selectedIssue = &issue // Store for title/description comparison on save
@@ -755,6 +926,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.issueEditor.Init()
 
 	case editor.ExecMsg:
+		if m.view == ViewAddComment {
+			var cmd tea.Cmd
+			m.commentEditor, cmd = m.commentEditor.Update(msg)
+			return m, cmd
+		}
 		// Forward to issueeditor modal if open - this allows Ctrl+G external editor
 		// to work from the modal's description field.
 		if m.view == ViewEditIssue {
@@ -765,6 +941,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case editor.FinishedMsg:
+		if m.view == ViewAddComment {
+			var cmd tea.Cmd
+			m.commentEditor, cmd = m.commentEditor.Update(msg)
+			return m, cmd
+		}
 		// Forward to issueeditor modal if open - ensures editor results return
 		// to the modal's description field when editing via Ctrl+G.
 		if m.view == ViewEditIssue {
@@ -779,6 +960,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case modal.CancelMsg:
 		return m.handleModalCancel()
+
+	case commenteditor.SaveMsg:
+		m.view = ViewSearch
+		return m, m.addCommentCmd(msg.IssueID, msg.Author, msg.Text)
+
+	case commenteditor.CancelMsg:
+		m.view = ViewSearch
+		return m, nil
 
 	case issueeditor.SaveMsg:
 		m.view = ViewSearch
@@ -816,6 +1005,8 @@ func (m Model) View() string {
 		return zone.Scan(m.newViewModal.Overlay(m.renderMainView()))
 	case ViewDeleteConfirm:
 		return zone.Scan(m.modal.Overlay(m.renderMainView()))
+	case ViewAddComment:
+		return m.commentEditor.Overlay(m.renderMainView())
 	case ViewEditIssue:
 		// formmodal.Overlay() already calls zone.Scan() internally;
 		// wrapping again causes background tree zones to interfere
@@ -870,6 +1061,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		// Delegate to modal
 		var cmd tea.Cmd
 		m.modal, cmd = m.modal.Update(msg)
+		return m, cmd
+
+	case ViewAddComment:
+		if msg.Type == tea.KeyCtrlC {
+			m.view = ViewSearch
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.commentEditor, cmd = m.commentEditor.Update(msg)
 		return m, cmd
 
 	case ViewEditIssue:
@@ -1339,6 +1539,13 @@ func (m Model) handleNavUp() (Model, tea.Cmd) {
 
 // handleMouseClick handles left-click release events on issues and the search input.
 func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
+	for _, pane := range []searchPane{searchPaneInput, searchPaneResults, searchPaneTree, searchPaneDetails} {
+		zoneID := makeSearchPaneActionZoneID(pane)
+		if z := zone.Get(zoneID); z != nil && z.InBounds(msg) {
+			return m.toggleMaximizedPane(pane), nil
+		}
+	}
+
 	// Click on search input focuses it
 	if z := zone.Get(zoneSearchInput); z != nil && z.InBounds(msg) {
 		m.focus = FocusSearch
@@ -1392,7 +1599,7 @@ func (m Model) handleMouseClick(msg tea.MouseMsg) (Model, tea.Cmd) {
 func (m *Model) updateDetailPanel() {
 	if m.selectedIdx >= 0 && m.selectedIdx < len(m.results) {
 		issue := m.results[m.selectedIdx]
-		rightWidth := m.width - (m.width / 2) - 1
+		detailsWidth, detailsHeight := m.detailsPaneSize()
 
 		// Preserve scroll position if viewing the same issue
 		var prevOffset int
@@ -1404,10 +1611,9 @@ func (m *Model) updateDetailPanel() {
 			}
 		}
 
-		// rightWidth-2 for left/right border, height-2 for top/bottom border
 		m.details = details.New(issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 			SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
-			SetSize(rightWidth-2, m.height-2)
+			SetSize(max(detailsWidth-2, 1), max(detailsHeight-2, 1))
 
 		// Restore scroll position for same issue
 		if sameIssue {
@@ -1427,7 +1633,7 @@ func (m *Model) updateDetailFromTree() {
 	if node == nil {
 		return
 	}
-	rightWidth := m.width - (m.width / 2) - 1
+	detailsWidth, detailsHeight := m.detailsPaneSize()
 
 	// Preserve scroll position if viewing the same issue
 	var prevOffset int
@@ -1439,10 +1645,9 @@ func (m *Model) updateDetailFromTree() {
 		}
 	}
 
-	// rightWidth-2 for left/right border, height-2 for top/bottom border
 	m.details = details.New(node.Issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
-		SetSize(rightWidth-2, m.height-2)
+		SetSize(max(detailsWidth-2, 1), max(detailsHeight-2, 1))
 
 	// Restore scroll position for same issue
 	if sameIssue {
@@ -1759,10 +1964,8 @@ func (m Model) handleTreeLoaded(msg treeLoadedMsg) (Model, tea.Cmd) {
 	m.tree.SetZonePrefix(zoneSearchTreePrefix)
 
 	// Set tree size based on available space (must be done before restoring cursor)
-	leftWidth := m.width / 2
-	// Tree height accounts for: borders (2)
-	treeHeight := max(m.height-2, 1)
-	m.tree.SetSize(leftWidth-2, treeHeight) // -2 for border
+	treeWidth, treeHeight := m.treePaneSize()
+	m.tree.SetSize(max(treeWidth-2, 1), max(treeHeight-2, 1))
 
 	// Restore cursor to previously selected issue if it exists in new tree
 	if previousSelectedID != "" {
@@ -1796,11 +1999,10 @@ func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
 	issue := issues[0]
 
 	// Update the details panel with this issue
-	rightWidth := m.width - (m.width / 2) - 1
-	// rightWidth-2 for left/right border, height-2 for top/bottom border
+	detailsWidth, detailsHeight := m.detailsPaneSize()
 	m.details = details.New(issue, m.services.QueryExecutor, m.services.QueryHelpers, m.services.TaskExecutor).
 		SetMarkdownStyle(m.services.Config.UI.MarkdownStyle).
-		SetSize(rightWidth-2, m.height-2)
+		SetSize(max(detailsWidth-2, 1), max(detailsHeight-2, 1))
 	m.hasDetail = true
 
 	// Try to find and select this issue in the results list
@@ -1822,68 +2024,90 @@ func (m Model) navigateToDependency(issueID string) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderMainView renders the 50/50 split layout.
+// renderMainView renders the main pane layout, stacking vertically on narrow terminals.
 func (m Model) renderMainView() string {
-	// Calculate widths (small gap between panels)
-	gap := 1
-	leftWidth := m.width / 2
-	rightWidth := m.width - leftWidth - gap
+	switch m.effectiveMaximizedPane() {
+	case searchPaneInput:
+		_, height := m.inputPaneSize()
+		return zone.Mark(zoneSearchInput, m.renderInputPanel(m.width, height))
+	case searchPaneResults:
+		_, height := m.resultsPaneSize()
+		return m.renderResultsPanel(m.width, height)
+	case searchPaneTree:
+		_, height := m.treePaneSize()
+		return m.renderTreePane(m.width, height)
+	case searchPaneDetails:
+		_, height := m.detailsPaneSize()
+		return zone.Mark(zoneSearchDetails, m.renderRightPanel(m.width, height))
+	}
+
+	layout := m.mainPaneLayout()
 
 	// Left panel: search + results
-	leftPanel := m.renderLeftPanel(leftWidth)
+	leftPanel := m.renderLeftPanel(layout.leftWidth, layout.leftHeight)
 
 	// Right panel: details
-	rightPanel := zone.Mark(zoneSearchDetails, m.renderRightPanel(rightWidth))
+	rightPanel := zone.Mark(zoneSearchDetails, m.renderRightPanel(layout.rightWidth, layout.rightHeight))
 
-	// Join horizontally with gap
-	content := lipgloss.JoinHorizontal(
+	if layout.stacked {
+		gapBlock := strings.Repeat("\n", max(layout.gap-1, 0))
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			leftPanel,
+			gapBlock,
+			rightPanel,
+		)
+	}
+
+	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftPanel,
-		strings.Repeat(" ", gap),
+		strings.Repeat(" ", layout.gap),
 		rightPanel,
 	)
-
-	return content
 }
 
 // renderLeftPanel renders the left panel, switching between list and tree sub-modes.
-func (m Model) renderLeftPanel(width int) string {
+func (m Model) renderLeftPanel(width, height int) string {
 	switch m.subMode {
 	case mode.SubModeTree:
-		return m.renderTreeLeftPanel(width)
+		return m.renderTreeLeftPanel(width, height)
 	default:
-		return m.renderListLeftPanel(width)
+		return m.renderListLeftPanel(width, height)
 	}
 }
 
-// renderListLeftPanel renders the left panel with search input and results (list sub-mode).
-func (m Model) renderListLeftPanel(width int) string {
-	var sb strings.Builder
-
-	// Calculate heights dynamically based on input content (capped at max height of 3)
-	inputContentHeight := min(m.input.TotalDisplayLines(), 3) // lines of wrapped text, max 3
-	inputHeight := inputContentHeight + 2                     // add 2 for borders
-	resultsHeight := m.height - inputHeight                   // fills remaining space
-
-	// BQL Search input with titled border
-	inputContent := m.input.View()
-	inputBorder := panes.BorderedPane(panes.BorderConfig{
-		Content:            inputContent,
+func (m Model) renderInputPanel(width, height int) string {
+	return panes.BorderedPane(panes.BorderConfig{
+		Content:            m.input.View(),
 		Width:              width,
-		Height:             inputHeight,
+		Height:             height,
 		TopLeft:            "BQL Search",
-		BottomLeft:         m.input.ModeIndicator(), // Vim mode indicator (styled by component)
+		BottomLeft:         m.input.ModeIndicator(),
+		HeaderAction:       m.headerAction(searchPaneInput),
 		Focused:            m.focus == FocusSearch,
 		TitleColor:         styles.OverlayTitleColor,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
-	sb.WriteString(zone.Mark(zoneSearchInput, inputBorder))
-	sb.WriteString("\n")
+}
 
-	// Build results content
+// renderListLeftPanel renders the left panel with search input and results (list sub-mode).
+func (m Model) renderListLeftPanel(width, height int) string {
+	var sb strings.Builder
+
+	inputHeight := m.inputPanelHeight()
+	resultsHeight := max(height-inputHeight, 1)
+
+	sb.WriteString(zone.Mark(zoneSearchInput, m.renderInputPanel(width, inputHeight)))
+	sb.WriteString("\n")
+	sb.WriteString(m.renderResultsPanel(width, resultsHeight))
+
+	return sb.String()
+}
+
+func (m Model) renderResultsPanel(width, height int) string {
 	var resultsContent string
 	if m.searchErr != nil && m.showSearchErr {
-		// Only show error after blur, not while typing
 		errStyle := lipgloss.NewStyle().
 			Foreground(styles.StatusErrorColor).
 			Padding(1, 2)
@@ -1904,31 +2128,25 @@ func (m Model) renderListLeftPanel(width int) string {
 		resultsContent = emptyStyle.Render("Enter a BQL query to search")
 	}
 
-	// Results count in top right (only shown if > 0)
 	var resultsCount string
 	if len(m.results) > 0 {
 		resultsCount = fmt.Sprintf("Count: %d", len(m.results))
 	}
 
-	// Results with titled border
-	resultsBorder := panes.BorderedPane(panes.BorderConfig{
+	return panes.BorderedPane(panes.BorderConfig{
 		Content:            resultsContent,
 		Width:              width,
-		Height:             resultsHeight,
+		Height:             height,
 		TopRight:           resultsCount,
+		HeaderAction:       m.headerAction(searchPaneResults),
 		Focused:            m.focus == FocusResults,
 		TitleColor:         styles.OverlayTitleColor,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
-	sb.WriteString(resultsBorder)
-
-	return sb.String()
 }
 
 // renderRightPanel renders the right panel with issue details.
-func (m Model) renderRightPanel(width int) string {
-	panelHeight := m.height
-
+func (m Model) renderRightPanel(width, height int) string {
 	var content string
 	if !m.hasDetail {
 		// Empty state
@@ -1944,8 +2162,9 @@ func (m Model) renderRightPanel(width int) string {
 	return panes.BorderedPane(panes.BorderConfig{
 		Content:            content,
 		Width:              width,
-		Height:             panelHeight,
+		Height:             height,
 		TopLeft:            "Issue Details",
+		HeaderAction:       m.headerAction(searchPaneDetails),
 		Focused:            m.focus == FocusDetails,
 		TitleColor:         styles.OverlayTitleColor,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
@@ -1970,8 +2189,7 @@ func renderCompactProgress(closed, total int) string {
 	return fmt.Sprintf("%s%s %.0f%% (%d/%d)", filled, empty, percent, closed, total)
 }
 
-// renderTreeLeftPanel renders the left panel with tree content (tree sub-mode).
-func (m Model) renderTreeLeftPanel(width int) string {
+func (m Model) renderTreePane(width, height int) string {
 	var content string
 	if m.tree != nil {
 		content = m.tree.View()
@@ -2004,13 +2222,19 @@ func (m Model) renderTreeLeftPanel(width int) string {
 	return panes.BorderedPane(panes.BorderConfig{
 		Content:            content,
 		Width:              width,
-		Height:             m.height,
+		Height:             height,
 		TopLeft:            leftTitle,
 		TopRight:           rightTitle,
+		HeaderAction:       m.headerAction(searchPaneTree),
 		Focused:            m.focus == FocusResults, // Tree panel uses "results" focus
 		TitleColor:         styles.OverlayTitleColor,
 		FocusedBorderColor: styles.BorderHighlightFocusColor,
 	})
+}
+
+// renderTreeLeftPanel renders the left panel with tree content (tree sub-mode).
+func (m Model) renderTreeLeftPanel(width, height int) string {
+	return m.renderTreePane(width, height)
 }
 
 // Message types
@@ -2033,6 +2257,15 @@ type issueSavedMsg struct {
 	issueID string
 	opts    task.UpdateOptions
 	err     error
+}
+
+// commentAddedMsg signals completion of an add comment operation.
+type commentAddedMsg struct {
+	issueID    string
+	issue      *task.Issue
+	comments   []task.Comment
+	err        error
+	refreshErr error
 }
 
 // saveActionExistingViewMsg is produced when "existing view" is selected in save action picker.
@@ -2125,6 +2358,24 @@ func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 	}
 }
 
+// addCommentCmd adds a comment and reloads comments for UI updates.
+func (m Model) addCommentCmd(issueID, author, text string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.services.TaskExecutor.AddComment(issueID, author, text); err != nil {
+			return commentAddedMsg{issueID: issueID, err: err}
+		}
+		issue, err := m.services.TaskExecutor.ShowIssue(issueID)
+		if err != nil {
+			return commentAddedMsg{issueID: issueID, refreshErr: err}
+		}
+		comments, err := m.services.TaskExecutor.GetComments(issueID)
+		if err != nil {
+			return commentAddedMsg{issueID: issueID, issue: issue, refreshErr: err}
+		}
+		return commentAddedMsg{issueID: issueID, issue: issue, comments: comments}
+	}
+}
+
 // HandleDBChanged processes database change notifications from the app.
 // This is called by app.go when the centralized watcher detects changes.
 // The app handles re-subscription; this method just triggers the refresh.
@@ -2189,14 +2440,105 @@ func (m Model) handleIssueSaved(msg issueSavedMsg) (Model, tea.Cmd) {
 	}
 
 	// Refresh list items since issueItem holds Issue by value
+	m.refreshResultsListItems()
+
+	return m, func() tea.Msg {
+		return mode.ShowToastMsg{Message: "Issue updated", Style: toaster.StyleSuccess}
+	}
+}
+
+// handleCommentAdded refreshes the affected issue across search results, tree state,
+// and the details panel after a successful comment creation.
+func (m Model) handleCommentAdded(msg commentAddedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, func() tea.Msg {
+			return mode.ShowToastMsg{Message: "Comment failed: " + msg.err.Error(), Style: toaster.StyleError}
+		}
+	}
+
+	var refreshed task.Issue
+	ok := false
+	if msg.issue != nil {
+		refreshed = *msg.issue
+		ok = true
+	} else if m.hasDetail && m.details.IssueID() == msg.issueID {
+		refreshed = m.details.Issue()
+		ok = true
+	} else {
+		for i := range m.results {
+			if m.results[i].ID == msg.issueID {
+				refreshed = m.results[i]
+				ok = true
+				break
+			}
+		}
+	}
+
+	if ok {
+		if msg.refreshErr == nil {
+			refreshed.Comments = msg.comments
+			refreshed.CommentCount = len(msg.comments)
+		} else if msg.issue == nil {
+			refreshed.CommentCount++
+		}
+		m.replaceIssue(refreshed)
+	}
+
+	if msg.refreshErr != nil && !ok {
+		return m, func() tea.Msg {
+			return mode.ShowToastMsg{
+				Message: "Comment added, but refresh failed: " + msg.refreshErr.Error(),
+				Style:   toaster.StyleWarn,
+			}
+		}
+	}
+
+	return m, func() tea.Msg {
+		return mode.ShowToastMsg{Message: "Comment added", Style: toaster.StyleSuccess}
+	}
+}
+
+func (m *Model) replaceIssue(issue task.Issue) {
+	updatedResults := false
+	for i := range m.results {
+		if m.results[i].ID == issue.ID {
+			m.results[i] = issue
+			updatedResults = true
+			break
+		}
+	}
+	if updatedResults {
+		m.refreshResultsListItems()
+	}
+
+	if m.tree != nil {
+		selectedID := ""
+		if node := m.tree.SelectedNode(); node != nil {
+			selectedID = node.Issue.ID
+		}
+		if m.tree.SelectByIssueID(issue.ID) {
+			if node := m.tree.SelectedNode(); node != nil {
+				node.Issue = issue
+			}
+			if selectedID != "" && selectedID != issue.ID {
+				m.tree.SelectByIssueID(selectedID)
+			}
+		}
+	}
+
+	if m.hasDetail && m.details.IssueID() == issue.ID {
+		m.details = m.details.ReplaceIssue(issue)
+	}
+}
+
+func (m *Model) refreshResultsListItems() {
 	items := make([]list.Item, len(m.results))
 	for i, issue := range m.results {
 		items[i] = issueItem{issue: issue}
 	}
 	m.resultsList.SetItems(items)
-
-	return m, func() tea.Msg {
-		return mode.ShowToastMsg{Message: "Issue updated", Style: toaster.StyleSuccess}
+	if m.selectedIdx >= 0 && m.selectedIdx < len(m.results) {
+		m.resultsList.Select(m.selectedIdx)
 	}
 }
 
@@ -2240,6 +2582,7 @@ const (
 	zoneSearchDetails    = "search:details"
 	zoneSearchListPrefix = "search:list:"
 	zoneSearchTreePrefix = "search:tree:"
+	zoneSearchActionBase = "search:action:"
 )
 
 // makeSearchListZoneID creates a zone ID for an issue in the search results list.
@@ -2250,6 +2593,21 @@ func makeSearchListZoneID(issueID string) string {
 // makeSearchTreeZoneID creates a zone ID for an issue in the search tree.
 func makeSearchTreeZoneID(issueID string) string {
 	return zoneSearchTreePrefix + issueID
+}
+
+func makeSearchPaneActionZoneID(pane searchPane) string {
+	switch pane {
+	case searchPaneInput:
+		return zoneSearchActionBase + "input"
+	case searchPaneResults:
+		return zoneSearchActionBase + "results"
+	case searchPaneTree:
+		return zoneSearchActionBase + "tree"
+	case searchPaneDetails:
+		return zoneSearchActionBase + "details"
+	default:
+		return zoneSearchActionBase + "unknown"
+	}
 }
 
 // issueItem wraps task.Issue for the list component.

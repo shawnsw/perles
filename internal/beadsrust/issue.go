@@ -59,7 +59,7 @@ type DepRef struct {
 
 // Comment represents a comment on an issue as returned by br show --json.
 type Comment struct {
-	ID        int       `json:"id"`
+	ID        string    `json:"id"`
 	IssueID   string    `json:"issue_id,omitempty"`
 	Author    string    `json:"author"`
 	Text      string    `json:"text"`

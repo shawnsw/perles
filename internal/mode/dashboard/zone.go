@@ -13,13 +13,18 @@ import (
 
 // Zone ID prefixes
 const (
-	zoneWorkflowPrefix  = "workflow:"
-	zoneTabPrefix       = "tab:"
-	zoneChatInput       = "chat-input"
-	zoneWorkflowTable   = "workflow-table"
-	zoneEpicTree        = "epic-tree"
-	zoneEpicDetails     = "epic-details"
-	zoneEpicIssuePrefix = "epic-issue:" // Prefix for clickable issues in epic tree
+	zoneWorkflowPrefix           = "workflow:"
+	zoneTabPrefix                = "tab:"
+	zoneChatInput                = "chat-input"
+	zoneWorkflowTable            = "workflow-table"
+	zoneEpicTree                 = "epic-tree"
+	zoneEpicDetails              = "epic-details"
+	zoneEpicIssuePrefix          = "epic-issue:" // Prefix for clickable issues in epic tree
+	zoneWorkflowAction           = "workflow-table:action"
+	zoneEpicTreeAction           = "epic-tree:action"
+	zoneEpicDetailsAction        = "epic-details:action"
+	zoneCoordinatorContentAction = "coordinator:content:action"
+	zoneCoordinatorInputAction   = "coordinator:input:action"
 )
 
 // makeWorkflowZoneID creates a zone ID for a workflow row.

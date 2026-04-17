@@ -411,7 +411,7 @@ func (m Model) renderBoardWithStatusBar() string {
 	boardStyle := lipgloss.NewStyle().Width(m.width)
 	view := boardStyle.Render(m.board.View())
 
-	if m.showStatusBar {
+	if m.showStatusBar && !m.board.IsMaximized() {
 		view += "\n"
 		if m.err != nil {
 			view += m.renderErrorBar()
@@ -461,7 +461,7 @@ func (m Model) restoreCursor(state *cursorState) (Model, bool) {
 
 // boardHeight returns the available height for the board, accounting for status bar.
 func (m Model) boardHeight() int {
-	if m.showStatusBar {
+	if m.showStatusBar && !m.board.IsMaximized() {
 		return m.height - 1 // Reserve 1 line for status bar
 	}
 	return m.height
@@ -470,6 +470,7 @@ func (m Model) boardHeight() int {
 // rebuildBoard recreates the board from the current config.
 func (m *Model) rebuildBoard() {
 	currentView := m.board.CurrentViewIndex()
+	maximizedColumn := m.board.MaximizedColumn()
 
 	clock := m.services.Clock
 	m.board = board.NewFromViews(m.services.Config.GetViews(), m.services.QueryExecutor, clock).
@@ -479,6 +480,9 @@ func (m *Model) rebuildBoard() {
 	// Restore view index if valid
 	if currentView > 0 && currentView < m.board.ViewCount() {
 		m.board, _ = m.board.SwitchToView(currentView)
+	}
+	if maximizedColumn >= 0 && maximizedColumn < m.board.ColCount() {
+		m.board = m.board.SetMaximizedColumn(maximizedColumn)
 	}
 }
 

@@ -35,12 +35,14 @@ import (
 	appreg "github.com/zjrosen/perles/internal/registry/application"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/help"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/chatrender"
 	"github.com/zjrosen/perles/internal/ui/shared/editor"
 	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
+	"github.com/zjrosen/perles/internal/ui/shared/panes"
 	"github.com/zjrosen/perles/internal/ui/shared/table"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/shared/vimtextarea"
@@ -73,6 +75,17 @@ const (
 	EpicFocusTree EpicViewFocus = iota
 	// EpicFocusDetails indicates the details pane has focus.
 	EpicFocusDetails
+)
+
+type dashboardPane int
+
+const (
+	dashboardPaneNone dashboardPane = iota
+	dashboardPaneWorkflowTable
+	dashboardPaneEpicTree
+	dashboardPaneEpicDetails
+	dashboardPaneCoordinatorContent
+	dashboardPaneCoordinatorInput
 )
 
 // epicTreeLoadedMsg is sent when the epic tree data has been loaded.
@@ -123,8 +136,9 @@ type Model struct {
 	renameModalWfID controlplane.WorkflowID // Workflow ID to rename on confirm
 
 	// Issue editor modal state (nil when not showing)
-	issueEditor  *issueeditor.Model
-	editingIssue *task.Issue // Original issue being edited (for change detection)
+	commentEditor *commenteditor.Model
+	issueEditor   *issueeditor.Model
+	editingIssue  *task.Issue // Original issue being edited (for change detection)
 
 	// Filter state
 	filter FilterState
@@ -143,6 +157,7 @@ type Model struct {
 	epicViewFocus    EpicViewFocus  // Which pane within epic view has focus
 	lastLoadedEpicID string         // ID of the last loaded epic (for stale response detection)
 	focus            DashboardFocus // Which zone has focus (table, epic, coordinator)
+	maximizedPane    dashboardPane  // Fullscreen pane, or none for normal layout
 
 	// Event subscription (global - all workflows)
 	eventCh     <-chan controlplane.ControlPlaneEvent
@@ -407,6 +422,40 @@ func (m Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 		}
 	}
 
+	// Handle comment editor modal when visible
+	if m.commentEditor != nil {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			if key.Matches(msg, keys.Common.Help) {
+				return m, nil
+			}
+		case commenteditor.SaveMsg:
+			m.commentEditor = nil
+			return m, m.addCommentCmd(msg.IssueID, msg.Author, msg.Text)
+		case commenteditor.CancelMsg:
+			m.commentEditor = nil
+			return m, nil
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			editor := m.commentEditor.SetSize(msg.Width, msg.Height)
+			m.commentEditor = &editor
+			return m, nil
+		case controlplane.ControlPlaneEvent:
+			return m.handleControlPlaneEvent(msg)
+		case eventSubscriptionReadyMsg:
+			m.eventCh = msg.eventCh
+			m.unsubscribe = msg.unsubscribe
+			return m, m.listenForEvents()
+		case commentAddedMsg:
+			return m.handleCommentAdded(msg)
+		}
+		var cmd tea.Cmd
+		newEditor, cmd := m.commentEditor.Update(msg)
+		m.commentEditor = &newEditor
+		return m, cmd
+	}
+
 	// Handle issue editor modal when visible
 	if m.issueEditor != nil {
 		switch msg := msg.(type) {
@@ -439,6 +488,8 @@ func (m Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 			return m, m.listenForEvents()
 		case issueSavedMsg:
 			return m.handleIssueSaved(msg)
+		case commentAddedMsg:
+			return m.handleCommentAdded(msg)
 		}
 		var cmd tea.Cmd
 		newEditor, cmd := m.issueEditor.Update(msg)
@@ -558,6 +609,9 @@ func (m Model) Update(msg tea.Msg) (mode.Controller, tea.Cmd) {
 	case issueSavedMsg:
 		return m.handleIssueSaved(msg)
 
+	case commentAddedMsg:
+		return m.handleCommentAdded(msg)
+
 	case CoordinatorPanelSubmitMsg:
 		// Check for slash commands first
 		if strings.HasPrefix(msg.Content, "/") {
@@ -653,6 +707,10 @@ func (m Model) View() string {
 	// Issue editor modal overlay (checked before help modal)
 	// Note: issueeditor.Overlay() delegates to formmodal.Overlay() which
 	// calls zone.Scan() internally, so no manual zone.Scan() wrapping needed.
+	if m.commentEditor != nil {
+		return m.commentEditor.Overlay(dashboardView)
+	}
+
 	if m.issueEditor != nil {
 		return m.issueEditor.Overlay(dashboardView)
 	}
@@ -686,20 +744,38 @@ func (m Model) View() string {
 func (m Model) SetSize(width, height int) mode.Controller {
 	m.width = width
 	m.height = height
+	return m.resizeForCurrentDimensions()
+}
+
+func (m Model) resizeForCurrentDimensions() Model {
 	if m.newWorkflowModal != nil {
-		m.newWorkflowModal = m.newWorkflowModal.SetSize(width, height)
+		m.newWorkflowModal = m.newWorkflowModal.SetSize(m.width, m.height)
 	}
-	m.helpModal = m.helpModal.SetSize(width, height)
+	m.helpModal = m.helpModal.SetSize(m.width, m.height)
+	if m.commentEditor != nil {
+		editor := m.commentEditor.SetSize(m.width, m.height)
+		m.commentEditor = &editor
+	}
 	if m.issueEditor != nil {
-		editor := m.issueEditor.SetSize(width, height)
+		editor := m.issueEditor.SetSize(m.width, m.height)
 		m.issueEditor = &editor
 	}
 
 	// Recalculate tree and details dimensions
 	if m.epicTree != nil {
+		if m.maximizedPane == dashboardPaneEpicTree {
+			m.epicTree.SetSize(max(m.width-2, 1), max(m.height-2, 1))
+			return m
+		}
+		if m.maximizedPane == dashboardPaneEpicDetails {
+			if m.hasEpicDetail {
+				m.epicDetails = m.epicDetails.SetSize(max(m.width-2, 1), max(m.height-2, 1))
+			}
+			return m
+		}
+
 		// Calculate available height for epic section (same logic as renderView)
-		footerHeight := 3 // Action hints pane
-		contentHeight := max(height-footerHeight, 5)
+		contentHeight := m.contentHeight()
 
 		// 55%/45% split (table/epic)
 		minTableHeight := minWorkflowTableRows + 3 // header/borders
@@ -708,9 +784,9 @@ func (m Model) SetSize(width, height int) mode.Controller {
 
 		if epicSectionHeight >= 5 {
 			// Calculate widths accounting for coordinator panel
-			epicWidth := width
+			epicWidth := m.width
 			if m.showCoordinatorPanel && m.coordinatorPanel != nil {
-				epicWidth = width - CoordinatorPanelWidth
+				epicWidth = m.width - CoordinatorPanelWidth
 			}
 
 			// Calculate tree/details layout
@@ -727,6 +803,74 @@ func (m Model) SetSize(width, height int) mode.Controller {
 	}
 
 	return m
+}
+
+func (m Model) hasMaximizedPane() bool {
+	return m.maximizedPane != dashboardPaneNone
+}
+
+func (m Model) footerHeight() int {
+	if len(m.workflows) > 0 && !m.hasMaximizedPane() {
+		return 3
+	}
+	return 0
+}
+
+func (m Model) contentHeight() int {
+	return max(m.height-m.footerHeight(), 5)
+}
+
+func (m Model) headerAction(pane dashboardPane) panes.HeaderAction {
+	label := "[+]"
+	if m.maximizedPane == pane {
+		label = "[-]"
+	}
+
+	zoneID := ""
+	switch pane {
+	case dashboardPaneWorkflowTable:
+		zoneID = zoneWorkflowAction
+	case dashboardPaneEpicTree:
+		zoneID = zoneEpicTreeAction
+	case dashboardPaneEpicDetails:
+		zoneID = zoneEpicDetailsAction
+	case dashboardPaneCoordinatorContent:
+		zoneID = zoneCoordinatorContentAction
+	case dashboardPaneCoordinatorInput:
+		zoneID = zoneCoordinatorInputAction
+	}
+
+	return panes.HeaderAction{Label: label, ZoneID: zoneID}
+}
+
+func (m Model) toggleMaximizedPane(pane dashboardPane) Model {
+	if (pane == dashboardPaneCoordinatorContent || pane == dashboardPaneCoordinatorInput) &&
+		(!m.showCoordinatorPanel || m.coordinatorPanel == nil) {
+		return m
+	}
+
+	if m.maximizedPane == pane {
+		m.maximizedPane = dashboardPaneNone
+	} else {
+		m.maximizedPane = pane
+	}
+
+	switch pane {
+	case dashboardPaneWorkflowTable:
+		m.focus = FocusTable
+	case dashboardPaneEpicTree:
+		m.focus = FocusEpicView
+		m.epicViewFocus = EpicFocusTree
+	case dashboardPaneEpicDetails:
+		m.focus = FocusEpicView
+		m.epicViewFocus = EpicFocusDetails
+	case dashboardPaneCoordinatorContent, dashboardPaneCoordinatorInput:
+		m.focus = FocusCoordinator
+	}
+
+	m.updateComponentFocusStates()
+	m.tableConfigCache = m.createWorkflowTableConfig()
+	return m.resizeForCurrentDimensions()
 }
 
 // Cleanup releases resources when exiting the dashboard mode.
@@ -1099,6 +1243,18 @@ func (m Model) handleCoordinatorKeys(msg tea.KeyMsg) (mode.Controller, tea.Cmd) 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (mode.Controller, tea.Cmd) {
 	// Only handle left-click release events for zone selection
 	if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
+		for zoneID, pane := range map[string]dashboardPane{
+			zoneWorkflowAction:           dashboardPaneWorkflowTable,
+			zoneEpicTreeAction:           dashboardPaneEpicTree,
+			zoneEpicDetailsAction:        dashboardPaneEpicDetails,
+			zoneCoordinatorContentAction: dashboardPaneCoordinatorContent,
+			zoneCoordinatorInputAction:   dashboardPaneCoordinatorInput,
+		} {
+			if z := zone.Get(zoneID); z != nil && z.InBounds(msg) {
+				return m.toggleMaximizedPane(pane), nil
+			}
+		}
+
 		// Check workflow row zones
 		filtered := m.getFilteredWorkflows()
 		for i := range filtered {
@@ -1236,11 +1392,16 @@ func (m Model) toggleCoordinatorPanel() (mode.Controller, tea.Cmd) {
 		// Close the panel
 		m.showCoordinatorPanel = false
 		m.coordinatorPanel = nil
-		return m, nil
+		if m.maximizedPane == dashboardPaneCoordinatorContent || m.maximizedPane == dashboardPaneCoordinatorInput {
+			m.maximizedPane = dashboardPaneNone
+		}
+		m.tableConfigCache = m.createWorkflowTableConfig()
+		return m.resizeForCurrentDimensions(), nil
 	}
 
 	m.openCoordinatorPanelForSelected()
-	return m, nil
+	m.tableConfigCache = m.createWorkflowTableConfig()
+	return m.resizeForCurrentDimensions(), nil
 }
 
 // openCoordinatorPanelForSelected opens the coordinator panel for the currently selected workflow.
@@ -1927,6 +2088,15 @@ type issueSavedMsg struct {
 	err     error
 }
 
+// commentAddedMsg signals completion of an add comment operation.
+type commentAddedMsg struct {
+	issueID    string
+	issue      *task.Issue
+	comments   []task.Comment
+	err        error
+	refreshErr error
+}
+
 // SelectedWorkflow returns the currently selected workflow, or nil if none.
 // This uses the filtered workflow list when a filter is active.
 func (m Model) SelectedWorkflow() *controlplane.WorkflowInstance {
@@ -1983,6 +2153,24 @@ func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 	}
 }
 
+// addCommentCmd adds a comment and reloads comments for UI updates.
+func (m Model) addCommentCmd(issueID, author, text string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.services.TaskExecutor.AddComment(issueID, author, text); err != nil {
+			return commentAddedMsg{issueID: issueID, err: err}
+		}
+		issue, err := m.services.TaskExecutor.ShowIssue(issueID)
+		if err != nil {
+			return commentAddedMsg{issueID: issueID, refreshErr: err}
+		}
+		comments, err := m.services.TaskExecutor.GetComments(issueID)
+		if err != nil {
+			return commentAddedMsg{issueID: issueID, issue: issue, refreshErr: err}
+		}
+		return commentAddedMsg{issueID: issueID, issue: issue, comments: comments}
+	}
+}
+
 // handleIssueSaved processes the result of a consolidated issue save.
 func (m Model) handleIssueSaved(msg issueSavedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
@@ -2005,6 +2193,74 @@ func (m Model) handleIssueSaved(msg issueSavedMsg) (Model, tea.Cmd) {
 	}
 
 	return m, loadEpicTree(m.lastLoadedEpicID, m.services.QueryExecutor)
+}
+
+// handleCommentAdded refreshes the selected epic issue after a successful comment creation.
+func (m Model) handleCommentAdded(msg commentAddedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		return m, func() tea.Msg {
+			return mode.ShowToastMsg{Message: "Comment failed: " + msg.err.Error(), Style: toaster.StyleError}
+		}
+	}
+
+	var refreshed task.Issue
+	ok := false
+	if msg.issue != nil {
+		refreshed = *msg.issue
+		ok = true
+	} else if m.hasEpicDetail && m.epicDetails.IssueID() == msg.issueID {
+		refreshed = m.epicDetails.Issue()
+		ok = true
+	} else if m.epicTree != nil && m.epicTree.SelectByIssueID(msg.issueID) {
+		if node := m.epicTree.SelectedNode(); node != nil {
+			refreshed = node.Issue
+			ok = true
+		}
+	}
+
+	if ok {
+		if msg.refreshErr == nil {
+			refreshed.Comments = msg.comments
+			refreshed.CommentCount = len(msg.comments)
+		} else if msg.issue == nil {
+			refreshed.CommentCount++
+		}
+		m.replaceEpicIssue(refreshed)
+	}
+
+	if msg.refreshErr != nil && !ok {
+		return m, func() tea.Msg {
+			return mode.ShowToastMsg{
+				Message: "Comment added, but refresh failed: " + msg.refreshErr.Error(),
+				Style:   toaster.StyleWarn,
+			}
+		}
+	}
+
+	return m, func() tea.Msg {
+		return mode.ShowToastMsg{Message: "Comment added", Style: toaster.StyleSuccess}
+	}
+}
+
+func (m *Model) replaceEpicIssue(issue task.Issue) {
+	if m.epicTree != nil {
+		selectedID := ""
+		if node := m.epicTree.SelectedNode(); node != nil {
+			selectedID = node.Issue.ID
+		}
+		if m.epicTree.SelectByIssueID(issue.ID) {
+			if node := m.epicTree.SelectedNode(); node != nil {
+				node.Issue = issue
+			}
+			if selectedID != "" && selectedID != issue.ID {
+				m.epicTree.SelectByIssueID(selectedID)
+			}
+		}
+	}
+
+	if m.hasEpicDetail && m.epicDetails.IssueID() == issue.ID {
+		m.epicDetails = m.epicDetails.ReplaceIssue(issue)
+	}
 }
 
 // InNewWorkflowModal returns true if the new workflow modal is showing.
@@ -2059,6 +2315,7 @@ func (m *Model) handleWorkflowSelectionChange(newIndex int) tea.Cmd {
 	m.selectedIndex = newIndex
 
 	// Close issue editor if open when switching workflows (prevents stale issue references)
+	m.commentEditor = nil
 	m.issueEditor = nil
 
 	// Load cached state for the new selection

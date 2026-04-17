@@ -58,6 +58,34 @@ function createMessageEvent(
   }
 }
 
+function createReplyEvent(
+  channelId: string,
+  parentId: string,
+  replyId: string,
+  createdBy: string,
+  content: string,
+  seq: number
+): FabricEvent {
+  return {
+    version: 1,
+    timestamp: new Date().toISOString(),
+    event: {
+      type: 'reply.posted',
+      timestamp: new Date().toISOString(),
+      channel_id: channelId,
+      parent_id: parentId,
+      thread: {
+        id: replyId,
+        type: 'reply',
+        created_at: new Date().toISOString(),
+        created_by: createdBy,
+        content,
+        seq,
+      },
+    },
+  }
+}
+
 const sampleEvents: FabricEvent[] = [
   createChannelEvent('ch-tasks', 'tasks', 'Tasks'),
   createChannelEvent('ch-general', 'general', 'General'),
@@ -121,10 +149,51 @@ describe('FabricPanel', () => {
       expect(screen.getByText('Task assigned')).toBeInTheDocument()
     })
 
+    it('renders messages even when channel.created is missing', () => {
+      const partialEvents: FabricEvent[] = [
+        {
+          version: 1,
+          timestamp: new Date().toISOString(),
+          event: {
+            type: 'message.posted',
+            timestamp: new Date().toISOString(),
+            channel_id: 'ch-tasks',
+            channel_slug: 'tasks',
+            thread: {
+              id: 'msg-1',
+              type: 'message',
+              created_at: new Date().toISOString(),
+              created_by: 'coordinator',
+              content: 'Recovered from partial log',
+              seq: 1,
+            },
+          },
+        },
+      ]
+
+      render(<FabricPanel events={partialEvents} />)
+
+      expect(screen.getAllByText('Tasks').length).toBeGreaterThan(0)
+      expect(screen.getByText('Recovered from partial log')).toBeInTheDocument()
+    })
+
     it('renders ChatInput at bottom of channel view', () => {
       render(<FabricPanel events={sampleEvents} workflowId="test-workflow" />)
       // ChatInput should render with placeholder
       expect(screen.getByPlaceholderText('Message #Tasks...')).toBeInTheDocument()
+    })
+
+    it('renders orphan replies instead of dropping them', () => {
+      const orphanReplyEvents: FabricEvent[] = [
+        createChannelEvent('ch-tasks', 'tasks', 'Tasks'),
+        createReplyEvent('ch-tasks', 'missing-parent', 'reply-1', 'worker-1', 'Recovered orphan reply', 1),
+      ]
+
+      render(<FabricPanel events={orphanReplyEvents} workflowId="test-workflow" />)
+
+      expect(screen.getByText('Recovered orphan reply')).toBeInTheDocument()
+      expect(screen.getByText('Original message unavailable')).toBeInTheDocument()
+      expect(screen.queryByText('No messages in this channel')).not.toBeInTheDocument()
     })
   })
 
@@ -177,6 +246,35 @@ describe('FabricPanel', () => {
       await waitFor(() => {
         const input = screen.getByPlaceholderText('Message #Tasks...')
         expect(input).toBeDisabled()
+      })
+    })
+
+    it('keeps ChatInput enabled for archived sessions with a session path', async () => {
+      mockFetch.mockImplementation((url: string) => {
+        if (url.includes('/api/fabric/agents')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                agents: [{ id: 'coordinator', role: 'coordinator' }],
+                isActive: false,
+              }),
+          })
+        }
+        return Promise.reject(new Error('Unknown endpoint'))
+      })
+
+      render(
+        <FabricPanel
+          events={sampleEvents}
+          workflowId="archived-workflow"
+          sessionPath="/tmp/session-123"
+        />
+      )
+
+      await waitFor(() => {
+        const input = screen.getByPlaceholderText('Message #Tasks...')
+        expect(input).not.toBeDisabled()
       })
     })
   })
@@ -235,6 +333,44 @@ describe('FabricPanel', () => {
       // After autocomplete selection, the content should be 'Hello world @coordinator '
       expect(body.content).toBe('Hello world @coordinator')
       expect(body.mentions).toContain('coordinator')
+    })
+
+    it('includes sessionPath when commenting on an archived session', async () => {
+      const user = userEvent.setup()
+
+      render(
+        <FabricPanel
+          events={sampleEvents}
+          workflowId="archived-workflow"
+          sessionPath="/tmp/session-123"
+        />
+      )
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/fabric/agents')
+        )
+      })
+
+      const input = screen.getByPlaceholderText('Message #Tasks...')
+      await user.type(input, 'Archive note')
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/fabric/send-message',
+          expect.objectContaining({
+            method: 'POST',
+          })
+        )
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sendCall = mockFetch.mock.calls.find((call: any) => call[0] === '/api/fabric/send-message')
+      expect(sendCall).toBeDefined()
+      if (!sendCall) throw new Error('sendCall not found')
+      const body = JSON.parse(sendCall[1].body)
+      expect(body.sessionPath).toBe('/tmp/session-123')
     })
 
     it('handleThreadReply calls /api/fabric/reply with correct params', async () => {
@@ -349,24 +485,7 @@ describe('FabricPanel', () => {
       // Add a message with a reply to create a thread
       const eventsWithThread: FabricEvent[] = [
         ...sampleEvents,
-        {
-          version: 1,
-          timestamp: new Date().toISOString(),
-          event: {
-            type: 'reply.posted',
-            timestamp: new Date().toISOString(),
-            channel_id: 'ch-tasks',
-            parent_id: 'msg-1',
-            thread: {
-              id: 'reply-1',
-              type: 'reply',
-              created_at: new Date().toISOString(),
-              created_by: 'worker-1',
-              content: 'This is a reply',
-              seq: 3,
-            },
-          },
-        },
+        createReplyEvent('ch-tasks', 'msg-1', 'reply-1', 'worker-1', 'This is a reply', 3),
       ]
 
       render(<FabricPanel events={eventsWithThread} workflowId="test-workflow" />)
@@ -382,6 +501,20 @@ describe('FabricPanel', () => {
       // The ChatInput inside should have the thread placeholder
       const threadInput = screen.getByPlaceholderText('Reply to thread...')
       expect(threadInput).toBeInTheDocument()
+    })
+
+    it('allows opening a thread to add the first comment', async () => {
+      const user = userEvent.setup()
+
+      render(<FabricPanel events={sampleEvents} workflowId="test-workflow" />)
+
+      const addCommentButton = screen.getByRole('button', {
+        name: /comment on message from coordinator/i,
+      })
+      await user.click(addCommentButton)
+
+      expect(screen.getByPlaceholderText('Reply to thread...')).toBeInTheDocument()
+      expect(screen.getByText('0 replies')).toBeInTheDocument()
     })
   })
 

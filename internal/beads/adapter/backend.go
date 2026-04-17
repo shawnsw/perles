@@ -63,9 +63,14 @@ func NewBeadsBackend(dataDir, workDir string) (*BeadsBackend, error) {
 		cachemanager.DefaultCleanupInterval,
 	)
 
-	// Create task executor (CLI-based, with comment reader bridged from DB client)
+	// Create task executor. Prefer direct DB comment reads, but fall back to
+	// the bd CLI for backends where comments are not exposed as a table.
 	beadsExec := infrabeads.NewBDExecutor(workDir, dataDir)
-	taskExec := NewBeadsTaskExecutor(beadsExec, WithCommentReader(client))
+	taskExec := NewBeadsTaskExecutor(
+		beadsExec,
+		WithCommentReader(client),
+		WithFallbackCommentReader(beadsExec),
+	)
 
 	// Create query executor (SQL-based via BQL engine)
 	bqlExec := bql.NewExecutor(client.DB(), client.Dialect(), bqlCache, depGraphCache)

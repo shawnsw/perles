@@ -51,6 +51,7 @@
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
+  min-width: 0;
 }
 
 .channel-item:hover {
@@ -235,6 +236,7 @@
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .channel-title h2 {
@@ -439,6 +441,7 @@
   border: none;
   border-radius: 0;
   position: relative;
+  min-width: 0;
 }
 
 .fabric-panel-slack .message-item:hover {
@@ -472,6 +475,7 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .fabric-panel-slack .message-author {
@@ -504,6 +508,8 @@
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
+  min-width: 0;
+  text-align: left;
 }
 
 .reply-indicator:hover {
@@ -542,6 +548,22 @@
 .reply-preview {
   color: var(--text-muted);
   font-size: 0.75rem;
+}
+
+.reply-indicator.empty {
+  padding: 0.5rem 0.625rem;
+}
+
+.orphan-notice {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(240, 136, 62, 0.15);
+  color: var(--accent-orange);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 
 /* Message Reactions */
@@ -798,4 +820,185 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
+}
+
+@media (max-width: 900px) {
+  .fabric-panel-slack {
+    flex-direction: column;
+  }
+
+  .channel-sidebar {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .channel-list {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 0.75rem;
+  }
+
+  .channel-item {
+    flex-shrink: 0;
+    width: auto;
+  }
+
+  .sidebar-footer {
+    margin-top: 0;
+    padding: 0 0.75rem 0.75rem;
+    border-top: none;
+  }
+
+  .sidebar-footer .channel-item {
+    width: auto;
+  }
+
+  .channel-header-top {
+    align-items: flex-start;
+    padding: 0.75rem 1rem 0.5rem;
+  }
+
+  .channel-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+  }
+
+  .channel-tabs {
+    overflow-x: auto;
+    padding: 0 0.75rem;
+  }
+
+  .artifacts-view {
+    flex-direction: column;
+  }
+
+  .artifacts-list {
+    width: 100%;
+    min-width: 0;
+    max-height: 220px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .thread-panel {
+    width: 100%;
+    min-width: 0;
+    max-height: 52vh;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+@media (max-width: 720px) {
+  .fabric-panel-slack {
+    margin: -0.75rem;
+    border-radius: 0;
+  }
+
+  .channel-list {
+    gap: 0.375rem;
+    padding: 0.5rem;
+  }
+
+  .channel-item {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .sidebar-footer {
+    padding: 0 0.5rem 0.5rem;
+  }
+
+  .channel-header-top {
+    padding: 0.75rem 0.875rem 0.5rem;
+  }
+
+  .message-list {
+    padding: 0.25rem 0;
+  }
+
+  .fabric-panel-slack .message-item,
+  .thread-message {
+    gap: 0.625rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8125rem;
+  }
+
+  .reply-indicator {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .reply-preview {
+    width: 100%;
+  }
+
+  .thread-header {
+    padding: 0.875rem 1rem;
+  }
+
+  .channel-input-container,
+  .thread-input-container {
+    padding: 0.75rem;
+  }
+
+  .fabric-panel-toast-container {
+    right: 0.75rem;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .fabric-panel-slack {
+    margin: -0.5rem;
+  }
+
+  .channel-title h2 {
+    font-size: 1rem;
+  }
+
+  .channel-purpose {
+    font-size: 0.6875rem;
+  }
+
+  .channel-tab {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .event-header {
+    flex-wrap: wrap;
+  }
+
+  .event-author {
+    margin-left: 0;
+  }
+
+  .event-time {
+    margin-left: auto;
+  }
+
+  .artifact-content-header,
+  .artifact-content-body {
+    padding: 0.875rem;
+  }
+
+  .thread-panel {
+    max-height: 58vh;
+  }
+
+  .fabric-panel-slack .message-item,
+  .thread-message {
+    padding: 0.625rem 0.75rem;
+  }
 }

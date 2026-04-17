@@ -32,6 +32,8 @@ const (
 	ColReady      ColumnIndex = 1
 	ColInProgress ColumnIndex = 2
 	ColClosed     ColumnIndex = 3
+
+	minHorizontalColumnWidth = 28
 )
 
 // View represents a named collection of columns.
@@ -56,6 +58,9 @@ type Model struct {
 	focused  int
 	width    int
 	height   int
+
+	// maximizedColumn stores the fullscreen column, or -1 for normal layout.
+	maximizedColumn int
 
 	// boardFocused controls whether the selected column is visually highlighted.
 	// When false (e.g., chat panel has focus), no column border is highlighted.
@@ -109,14 +114,15 @@ func NewFromViews(viewConfigs []config.ViewConfig, executor task.QueryExecutor, 
 	}
 
 	return Model{
-		views:        views,
-		currentView:  0,
-		columns:      columns,
-		configs:      configs,
-		executor:     executor,
-		clock:        clock,
-		focused:      focusIdx,
-		boardFocused: true, // Board has focus by default
+		views:           views,
+		currentView:     0,
+		columns:         columns,
+		configs:         configs,
+		executor:        executor,
+		clock:           clock,
+		focused:         focusIdx,
+		maximizedColumn: -1,
+		boardFocused:    true, // Board has focus by default
 	}
 }
 
@@ -135,20 +141,55 @@ func (m Model) SetSize(width, height int) Model {
 		return m
 	}
 
-	// Distribute width evenly, giving remainder to the last columns
+	if m.maximizedColumn >= 0 && m.maximizedColumn < colCount {
+		m.columns[m.maximizedColumn] = m.columns[m.maximizedColumn].SetSize(width, height)
+		return m
+	}
+
+	if m.useStackedLayout() {
+		baseHeight := height / colCount
+		remainder := height % colCount
+
+		for i := range m.columns {
+			colHeight := baseHeight
+			if i >= colCount-remainder {
+				colHeight++
+			}
+			m.columns[i] = m.columns[i].SetSize(width, max(colHeight, 3))
+		}
+		return m
+	}
+
 	baseWidth := width / colCount
 	remainder := width % colCount
-	contentHeight := height
 
 	for i := range m.columns {
 		colWidth := baseWidth
-		// Give extra width to the last 'remainder' columns
 		if i >= colCount-remainder {
 			colWidth++
 		}
-		m.columns[i] = m.columns[i].SetSize(colWidth, contentHeight)
+		m.columns[i] = m.columns[i].SetSize(colWidth, height)
 	}
 	return m
+}
+
+func (m Model) useStackedLayout() bool {
+	if len(m.columns) <= 1 {
+		return false
+	}
+	return m.width/len(m.columns) < minHorizontalColumnWidth
+}
+
+func (m Model) visibleColumnIndices() []int {
+	if m.maximizedColumn >= 0 && m.maximizedColumn < len(m.columns) {
+		return []int{m.maximizedColumn}
+	}
+
+	indices := make([]int, len(m.columns))
+	for i := range m.columns {
+		indices[i] = i
+	}
+	return indices
 }
 
 // SetShowCounts sets whether to display counts in column titles.
@@ -176,6 +217,9 @@ func (m Model) FocusedColumn() int {
 func (m Model) SetFocus(col int) Model {
 	if col >= 0 && col < len(m.columns) {
 		m.focused = col
+		if m.maximizedColumn >= 0 {
+			m.maximizedColumn = col
+		}
 	}
 	return m
 }
@@ -230,11 +274,48 @@ func (m Model) SelectByID(id string) (Model, bool) {
 			if found {
 				m.columns[i] = col
 				m.focused = i
+				if m.maximizedColumn >= 0 {
+					m.maximizedColumn = i
+				}
 				return m, true
 			}
 		}
 	}
 	return m, false
+}
+
+// MaximizedColumn returns the fullscreen column index, or -1 when disabled.
+func (m Model) MaximizedColumn() int {
+	if m.maximizedColumn < 0 || m.maximizedColumn >= len(m.columns) {
+		return -1
+	}
+	return m.maximizedColumn
+}
+
+// IsMaximized reports whether the board is currently showing a single fullscreen column.
+func (m Model) IsMaximized() bool {
+	return m.MaximizedColumn() >= 0
+}
+
+// SetMaximizedColumn updates the fullscreen column and reapplies sizing.
+func (m Model) SetMaximizedColumn(col int) Model {
+	if col < 0 || col >= len(m.columns) {
+		m.maximizedColumn = -1
+	} else {
+		m.maximizedColumn = col
+		m.focused = col
+	}
+	if m.width > 0 && m.height > 0 {
+		m = m.SetSize(m.width, m.height)
+	}
+	return m
+}
+
+func (m Model) toggleMaximizedColumn(col int) Model {
+	if m.maximizedColumn == col {
+		return m.SetMaximizedColumn(-1)
+	}
+	return m.SetMaximizedColumn(col)
 }
 
 // Column returns the column at the given index (type asserted to Column).
@@ -448,9 +529,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		for _, colIdx := range m.visibleColumnIndices() {
+			if z := zone.Get(makeHeaderActionZoneID(colIdx)); z != nil && z.InBounds(msg) {
+				m = m.toggleMaximizedColumn(colIdx)
+				return m, nil
+			}
+		}
+
 		// Check if click is within any registered issue zone
 		// Iterate through all columns and their items to find the clicked zone
-		for colIdx, col := range m.columns {
+		for _, colIdx := range m.visibleColumnIndices() {
+			col := m.columns[colIdx]
 			// Handle BQL columns (Column type)
 			if c, ok := col.(Column); ok {
 				for _, issue := range c.Items() {
@@ -487,12 +576,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, keys.Common.Left):
 			if m.focused > 0 {
 				m.focused--
+				if m.maximizedColumn >= 0 {
+					m.maximizedColumn = m.focused
+					m = m.SetSize(m.width, m.height)
+				}
 			}
 			return m, nil
 
 		case key.Matches(msg, keys.Common.Right):
 			if m.focused < len(m.columns)-1 {
 				m.focused++
+				if m.maximizedColumn >= 0 {
+					m.maximizedColumn = m.focused
+					m = m.SetSize(m.width, m.height)
+				}
 			}
 			return m, nil
 
@@ -518,10 +615,8 @@ func (m Model) View() string {
 
 	var cols []string
 
-	// Use height as-is - caller should account for status bar
-	contentHeight := max(m.height, 3)
-
-	for i, col := range m.columns {
+	for _, i := range m.visibleColumnIndices() {
+		col := m.columns[i]
 		isFocused := i == m.focused
 		// Only show focus highlight when board has focus
 		showFocusHighlight := isFocused && m.boardFocused
@@ -534,11 +629,15 @@ func (m Model) View() string {
 
 		// Render column with bordered title
 		rendered := panes.BorderedPane(panes.BorderConfig{
-			Content:            col.View(),
-			Width:              col.Width(),
-			Height:             contentHeight,
-			TopLeft:            col.Title(),
-			TopRight:           col.RightTitle(),
+			Content:  col.View(),
+			Width:    col.Width(),
+			Height:   max(col.Height(), 3),
+			TopLeft:  col.Title(),
+			TopRight: col.RightTitle(),
+			HeaderAction: panes.HeaderAction{
+				Label:  m.headerActionLabel(i),
+				ZoneID: makeHeaderActionZoneID(i),
+			},
 			Focused:            showFocusHighlight,
 			TitleColor:         colColor,
 			FocusedBorderColor: colColor,
@@ -546,8 +645,19 @@ func (m Model) View() string {
 		cols = append(cols, rendered)
 	}
 
-	// Scan for zone markers and register positions for mouse click detection
-	return zone.Scan(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
+	layout := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+	if m.useStackedLayout() {
+		layout = lipgloss.JoinVertical(lipgloss.Left, cols...)
+	}
+
+	return zone.Scan(layout)
+}
+
+func (m Model) headerActionLabel(colIdx int) string {
+	if m.maximizedColumn == colIdx {
+		return "[-]"
+	}
+	return "[+]"
 }
 
 // renderEmptyState renders a centered message when no columns are configured.

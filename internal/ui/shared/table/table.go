@@ -223,6 +223,7 @@ func (m Model) renderTable(selectedIndex int) string {
 			Width:              m.width,
 			Height:             m.height,
 			TopLeft:            m.config.Title,
+			HeaderAction:       m.config.HeaderAction,
 			BorderColor:        m.config.BorderColor,
 			Focused:            m.config.Focused,
 			FocusedBorderColor: m.config.FocusedBorderColor,

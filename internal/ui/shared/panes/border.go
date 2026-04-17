@@ -32,6 +32,13 @@ type Tab struct {
 	ZoneID  string                 // Optional zone ID for mouse click detection (empty = no zone)
 }
 
+// HeaderAction renders a small clickable control in the top-right border area.
+// This is intended for per-pane actions such as maximize/restore.
+type HeaderAction struct {
+	Label  string // Visible action label, e.g. "[+]" or "[-]"
+	ZoneID string // Optional bubblezone ID for mouse click detection
+}
+
 // BorderConfig configures the appearance of a bordered panel.
 // This is the new struct-based API that replaces the 8-parameter RenderWithTitleBorder function.
 type BorderConfig struct {
@@ -41,12 +48,13 @@ type BorderConfig struct {
 	Height  int    // Total height including borders
 
 	// Title placement (6 positions - all optional)
-	TopLeft      string // Title on top border, left-aligned
-	TopMiddle    string // Title on top border, centered (not yet implemented)
-	TopRight     string // Title on top border, right-aligned
-	BottomLeft   string // Title on bottom border, left-aligned
-	BottomMiddle string // Title on bottom border, centered (not yet implemented)
-	BottomRight  string // Title on bottom border, right-aligned
+	TopLeft      string       // Title on top border, left-aligned
+	TopMiddle    string       // Title on top border, centered (not yet implemented)
+	TopRight     string       // Title on top border, right-aligned
+	BottomLeft   string       // Title on bottom border, left-aligned
+	BottomMiddle string       // Title on bottom border, centered (not yet implemented)
+	BottomRight  string       // Title on bottom border, right-aligned
+	HeaderAction HeaderAction // Optional clickable action rendered at the far right of the top border
 
 	// Styling
 	Focused            bool                   // Whether the panel has focus
@@ -57,6 +65,7 @@ type BorderConfig struct {
 	// Tab mode (optional - when Tabs is non-empty, enables tab mode)
 	// In tab mode, TopLeft, TopRight, and TitleColor are ignored.
 	// Tab labels are rendered in the title bar instead.
+	// HeaderAction still renders at the far right of the title bar.
 	Tabs             []Tab                  // Enables tab mode when non-empty
 	ActiveTab        int                    // 0-indexed active tab (clamped to valid range)
 	ActiveTabColor   lipgloss.TerminalColor // Custom active tab color (default: BorderHighlightFocusColor)
@@ -117,8 +126,17 @@ func BorderedPane(cfg BorderConfig) string {
 		activeStyle := resolveActiveTabStyle(cfg.ActiveTabColor, activeTabColor)
 		inactiveStyle := resolveInactiveTabStyle(cfg.InactiveTabColor)
 
+		actionStyle := lipgloss.NewStyle().Bold(true).Foreground(borderColor)
+
 		// Build top border with tab labels
-		topBorder = buildTabTitleTopBorder(cfg.Tabs, activeTab, innerWidth, borderStyle, activeStyle, inactiveStyle)
+		if cfg.HeaderAction.Label != "" {
+			topBorder = buildTabTitleTopBorderWithAction(
+				cfg.Tabs, activeTab, cfg.HeaderAction, innerWidth,
+				borderStyle, activeStyle, inactiveStyle, actionStyle,
+			)
+		} else {
+			topBorder = buildTabTitleTopBorder(cfg.Tabs, activeTab, innerWidth, borderStyle, activeStyle, inactiveStyle)
+		}
 
 		// Select content from the active tab
 		content = cfg.Tabs[activeTab].Content
@@ -131,8 +149,17 @@ func BorderedPane(cfg BorderConfig) string {
 		}
 		titleStyle := lipgloss.NewStyle().Foreground(titleColor)
 
+		actionStyle := lipgloss.NewStyle().Bold(true).Foreground(titleColor)
+
 		// Build top border with embedded titles
-		topBorder = buildDualTitleTopBorder(cfg.TopLeft, cfg.TopRight, innerWidth, borderStyle, titleStyle)
+		if cfg.HeaderAction.Label != "" {
+			topBorder = buildDualTitleTopBorderWithAction(
+				cfg.TopLeft, cfg.TopRight, cfg.HeaderAction, innerWidth,
+				borderStyle, titleStyle, actionStyle,
+			)
+		} else {
+			topBorder = buildDualTitleTopBorder(cfg.TopLeft, cfg.TopRight, innerWidth, borderStyle, titleStyle)
+		}
 
 		// Use content from cfg.Content
 		content = cfg.Content
@@ -383,6 +410,90 @@ func buildDualTitleTopBorder(leftTitle, rightTitle string, innerWidth int, borde
 	return result.String()
 }
 
+// buildDualTitleTopBorderWithAction creates the top border with a far-right action control.
+// Format: ╭─ LeftTitle ─────────────── RightTitle [+] ─╮
+func buildDualTitleTopBorderWithAction(
+	leftTitle,
+	rightTitle string,
+	action HeaderAction,
+	innerWidth int,
+	borderStyle,
+	titleStyle,
+	actionStyle lipgloss.Style,
+) string {
+	if action.Label == "" {
+		return buildDualTitleTopBorder(leftTitle, rightTitle, innerWidth, borderStyle, titleStyle)
+	}
+
+	if innerWidth < 1 {
+		return borderStyle.Render(borderTopLeft + borderTopRight)
+	}
+
+	actionRendered, actionWidth := renderHeaderAction(action, actionStyle)
+	if actionWidth == 0 {
+		return buildDualTitleTopBorder(leftTitle, rightTitle, innerWidth, borderStyle, titleStyle)
+	}
+
+	// Reserve the action first; auxiliary right-side text is optional and dropped when space is tight.
+	rightBlockRendered := actionRendered
+	rightBlockWidth := actionWidth
+	if rightTitle != "" {
+		candidateWidth := lipgloss.Width(rightTitle) + 1 + actionWidth
+		leftMinWidth := 0
+		if leftTitle != "" {
+			leftMinWidth = lipgloss.Width(leftTitle) + 3
+		}
+		if innerWidth >= leftMinWidth+candidateWidth+4 {
+			rightBlockRendered = titleStyle.Render(rightTitle) + borderStyle.Render(" ") + actionRendered
+			rightBlockWidth = candidateWidth
+		}
+	}
+
+	rightSegmentWidth := rightBlockWidth + 3 // " " + right block + " ─"
+	if innerWidth < rightSegmentWidth+1 {
+		return borderStyle.Render(borderTopLeft + strings.Repeat(borderHorizontal, innerWidth) + borderTopRight)
+	}
+
+	displayLeft := ""
+	leftSegmentWidth := 0
+	if leftTitle != "" {
+		maxLeftWidth := innerWidth - rightSegmentWidth - 4 // left title + framing + at least one dash
+		if maxLeftWidth > 0 {
+			displayLeft = leftTitle
+			if lipgloss.Width(displayLeft) > maxLeftWidth {
+				displayLeft = styles.TruncateString(displayLeft, maxLeftWidth)
+			}
+			leftSegmentWidth = lipgloss.Width(displayLeft) + 3
+		}
+	}
+
+	middleDashes := innerWidth - leftSegmentWidth - rightSegmentWidth
+	if middleDashes < 1 {
+		displayLeft = ""
+		leftSegmentWidth = 0
+		middleDashes = innerWidth - rightSegmentWidth
+	}
+	if middleDashes < 1 {
+		return borderStyle.Render(borderTopLeft + strings.Repeat(borderHorizontal, innerWidth) + borderTopRight)
+	}
+
+	var result strings.Builder
+	result.WriteString(borderStyle.Render(borderTopLeft))
+
+	if displayLeft != "" {
+		result.WriteString(borderStyle.Render(borderHorizontal + " "))
+		result.WriteString(titleStyle.Render(displayLeft))
+		result.WriteString(borderStyle.Render(" "))
+	}
+
+	result.WriteString(borderStyle.Render(strings.Repeat(borderHorizontal, middleDashes)))
+	result.WriteString(borderStyle.Render(" "))
+	result.WriteString(rightBlockRendered)
+	result.WriteString(borderStyle.Render(" " + borderHorizontal + borderTopRight))
+
+	return result.String()
+}
+
 // buildDualTitleBottomBorder creates the bottom border with titles on both left and right.
 // Format: ╰─ LeftTitle ─────────────────── RightTitle ─╯
 // This mirrors buildDualTitleTopBorder but uses bottom corner characters.
@@ -580,6 +691,127 @@ func buildTabTitleTopBorder(tabs []Tab, activeTab int, innerWidth int, borderSty
 	result.WriteString(borderStyle.Render(" " + strings.Repeat(borderHorizontal, trailingDashes-1) + borderTopRight))
 
 	return result.String()
+}
+
+// buildTabTitleTopBorderWithAction creates the top border with tab labels and a far-right action.
+// Format: ╭─ Tab1 ─ Tab2 ─────────────── [+] ─╮
+func buildTabTitleTopBorderWithAction(
+	tabs []Tab,
+	activeTab int,
+	action HeaderAction,
+	innerWidth int,
+	borderStyle,
+	activeStyle,
+	inactiveStyle,
+	actionStyle lipgloss.Style,
+) string {
+	if action.Label == "" {
+		return buildTabTitleTopBorder(tabs, activeTab, innerWidth, borderStyle, activeStyle, inactiveStyle)
+	}
+	if len(tabs) == 0 {
+		return buildDualTitleTopBorderWithAction("", "", action, innerWidth, borderStyle, lipgloss.NewStyle(), actionStyle)
+	}
+	if innerWidth < 1 {
+		return borderStyle.Render(borderTopLeft + borderTopRight)
+	}
+
+	actionRendered, actionWidth := renderHeaderAction(action, actionStyle)
+	if actionWidth == 0 {
+		return buildTabTitleTopBorder(tabs, activeTab, innerWidth, borderStyle, activeStyle, inactiveStyle)
+	}
+
+	// Clamp activeTab to valid range: [0, len(tabs)-1]
+	if activeTab < 0 {
+		activeTab = 0
+	}
+	if activeTab >= len(tabs) {
+		activeTab = len(tabs) - 1
+	}
+
+	separator := " " + borderHorizontal + " "
+	separatorWidth := 3
+	numTabs := len(tabs)
+	separatorsWidth := 0
+	if numTabs > 1 {
+		separatorsWidth = (numTabs - 1) * separatorWidth
+	}
+	rightSegmentWidth := actionWidth + 3 // " " + action + " ─"
+	availableForLabels := innerWidth - 2 - separatorsWidth - rightSegmentWidth - 1
+	if availableForLabels < numTabs {
+		return buildDualTitleTopBorderWithAction("", "", action, innerWidth, borderStyle, lipgloss.NewStyle(), actionStyle)
+	}
+
+	totalLabelWidth := 0
+	for _, tab := range tabs {
+		totalLabelWidth += lipgloss.Width(tab.Label)
+	}
+
+	labels := make([]string, numTabs)
+	if totalLabelWidth > availableForLabels {
+		for i, tab := range tabs {
+			originalWidth := lipgloss.Width(tab.Label)
+			share := min(max(availableForLabels*originalWidth/totalLabelWidth, 3), originalWidth)
+			labels[i] = styles.TruncateString(tab.Label, share)
+		}
+	} else {
+		for i, tab := range tabs {
+			labels[i] = tab.Label
+		}
+	}
+
+	var result strings.Builder
+	result.WriteString(borderStyle.Render(borderTopLeft + borderHorizontal + " "))
+
+	renderedContentWidth := 2 // "─ " prefix
+	for i, label := range labels {
+		var styledLabel string
+		if strings.Contains(label, "\x1b[") {
+			styledLabel = label
+		} else {
+			style := inactiveStyle
+			if i == activeTab {
+				style = activeStyle
+			}
+			styledLabel = style.Render(label)
+		}
+
+		if tabs[i].ZoneID != "" {
+			styledLabel = zone.Mark(tabs[i].ZoneID, styledLabel)
+		}
+
+		result.WriteString(styledLabel)
+		renderedContentWidth += lipgloss.Width(label)
+
+		if i < numTabs-1 {
+			result.WriteString(borderStyle.Render(separator))
+			renderedContentWidth += separatorWidth
+		}
+	}
+
+	middleDashes := innerWidth - renderedContentWidth - rightSegmentWidth
+	if middleDashes < 1 {
+		middleDashes = 1
+	}
+
+	result.WriteString(borderStyle.Render(strings.Repeat(borderHorizontal, middleDashes)))
+	result.WriteString(borderStyle.Render(" "))
+	result.WriteString(actionRendered)
+	result.WriteString(borderStyle.Render(" " + borderHorizontal + borderTopRight))
+
+	return result.String()
+}
+
+func renderHeaderAction(action HeaderAction, actionStyle lipgloss.Style) (string, int) {
+	if action.Label == "" {
+		return "", 0
+	}
+
+	rendered := actionStyle.Render(action.Label)
+	if action.ZoneID != "" {
+		rendered = zone.Mark(action.ZoneID, rendered)
+	}
+
+	return rendered, lipgloss.Width(action.Label)
 }
 
 // buildBottomBorder creates the bottom border with embedded title.

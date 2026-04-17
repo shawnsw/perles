@@ -1,7 +1,7 @@
-╭─ BQL Search ───────────────────────────────────╮ ╭─ Issue Details ───────────────────────────────╮
+╭─ BQL Search ───────────────────────────── [+] ─╮ ╭─ Issue Details ───────────────────────── [+] ─╮
 │[7m [27m                                               │ │[F][P1][bd-a1b] Implement webhook system       │
 ╰────────────────────────────────────────────────╯ │                                               │
-╭───────────────────────────────────── Count: 3 ─╮ │Status: Open                                   │
+╭───────────────────────────────── Count: 3 [+] ─╮ │Status: Open                                   │
 │>[F][P1][bd-a1b] Implement webhoo... 3💬 10h ago│ │                                               │
 │ [B][P0][bd-c2d] Fix crash on startup     3d ago│ │No description                                 │
 │ [T][P2][bd-e3f] Add unit tests       1💬 2w ago│ │                                               │

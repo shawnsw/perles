@@ -1,4 +1,4 @@
-╭─ Workflows ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Workflows ──────────────────────────────────────────────────────────────────────────────────────────────────── [+] ─╮
 │🔔 🔒 Status    Name                EpicID           WorkDir                 Workers  Health   Uptime   Started       │
 │      RUNNING   Epic-linked work... perles-abc.1     ·                       2        ❤️ 0s    -        -             │
 │      PENDING   Standalone workflow -                ·                       0        -        -        -             │

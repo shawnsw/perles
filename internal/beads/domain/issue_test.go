@@ -40,13 +40,13 @@ func TestIssue_FieldAccess(t *testing.T) {
 func TestComment_FieldAccess(t *testing.T) {
 	now := time.Now()
 	comment := Comment{
-		ID:        1,
+		ID:        "comment-1",
 		Author:    "alice",
 		Text:      "This is a comment",
 		CreatedAt: now,
 	}
 
-	require.Equal(t, 1, comment.ID)
+	require.Equal(t, "comment-1", comment.ID)
 	require.Equal(t, "alice", comment.Author)
 	require.Equal(t, "This is a comment", comment.Text)
 	require.Equal(t, now, comment.CreatedAt)

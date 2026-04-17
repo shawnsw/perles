@@ -11,6 +11,7 @@ import (
 	"github.com/zjrosen/perles/internal/orchestration/controlplane"
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/commenteditor"
 	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/toaster"
 	"github.com/zjrosen/perles/internal/ui/tree"
@@ -144,10 +145,12 @@ func (m *Model) calculateEpicDetailsSize() (int, int) {
 	if m.width == 0 || m.height == 0 {
 		return 0, 0
 	}
+	if m.maximizedPane == dashboardPaneEpicDetails {
+		return max(m.width-2, 1), max(m.height-2, 1)
+	}
 
 	// Same logic as SetSize and renderView
-	footerHeight := 3
-	contentHeight := max(m.height-footerHeight, 5)
+	contentHeight := m.contentHeight()
 
 	minTableHeight := minWorkflowTableRows + 3
 	tableHeight := max(contentHeight*55/100, minTableHeight)
@@ -301,6 +304,16 @@ func (m Model) handleEpicTreeKeysFocusDetails(msg tea.KeyMsg) (mode.Controller, 
 				m.issueEditor = &editor
 				return m, m.issueEditor.Init()
 			}
+		}
+		return m, nil
+	}
+
+	if key.Matches(msg, keys.Component.CommentAction) {
+		if m.hasEpicDetail {
+			issue := m.epicDetails.Issue()
+			editor := commenteditor.NewWithVimMode(issue, m.vimMode).SetSize(m.width, m.height)
+			m.commentEditor = &editor
+			return m, m.commentEditor.Init()
 		}
 		return m, nil
 	}
