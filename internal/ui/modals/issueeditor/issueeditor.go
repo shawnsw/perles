@@ -18,13 +18,16 @@ import (
 
 // Model holds the issue editor state.
 type Model struct {
-	issue task.Issue
-	form  formmodal.Model
+	issue      task.Issue
+	form       formmodal.Model
+	createMode bool
 }
 
 // SaveMsg is sent when the user confirms issue changes.
 type SaveMsg struct {
 	IssueID     string
+	IssueType   task.IssueType
+	ParentID    string
 	Title       string
 	Description string
 	Notes       string
@@ -49,7 +52,7 @@ func (m SaveMsg) BuildUpdateOptions(original *task.Issue) task.UpdateOptions {
 		opts.Priority = &p
 		s := m.Status
 		opts.Status = &s
-		labels := m.Labels
+		labels := cloneLabels(m.Labels)
 		opts.Labels = &labels
 		return opts
 	}
@@ -71,10 +74,17 @@ func (m SaveMsg) BuildUpdateOptions(original *task.Issue) task.UpdateOptions {
 		opts.Status = &s
 	}
 	if !slices.Equal(m.Labels, original.Labels) {
-		labels := m.Labels
+		labels := cloneLabels(m.Labels)
 		opts.Labels = &labels
 	}
 	return opts
+}
+
+func cloneLabels(labels []string) []string {
+	if labels == nil {
+		return nil
+	}
+	return append([]string{}, labels...)
 }
 
 // New creates a new issue editor with vim mode disabled by default.
@@ -85,98 +95,223 @@ func New(issue task.Issue) Model {
 
 // NewWithVimMode creates a new issue editor with the given issue and vim mode setting.
 func NewWithVimMode(issue task.Issue, vimEnabled bool) Model {
-	m := Model{issue: issue}
+	return newModel(issue, nil, vimEnabled, false)
+}
 
+// NewForCreate creates a new issue editor in create mode with vim mode disabled.
+func NewForCreate() Model {
+	return NewForCreateWithExecutorAndVimMode(nil, false)
+}
+
+// NewForCreateWithVimMode creates a new issue editor in create mode.
+func NewForCreateWithVimMode(vimEnabled bool) Model {
+	return NewForCreateWithExecutorAndVimMode(nil, vimEnabled)
+}
+
+// NewForCreateWithExecutorAndVimMode creates a new issue editor in create mode.
+func NewForCreateWithExecutorAndVimMode(epicSearchExecutor task.QueryExecutor, vimEnabled bool) Model {
+	issue := task.Issue{
+		Type:     task.TypeTask,
+		Priority: task.PriorityMedium,
+		Status:   task.StatusOpen,
+		Labels:   []string{},
+	}
+	return newModel(issue, epicSearchExecutor, vimEnabled, true)
+}
+
+func newModel(issue task.Issue, epicSearchExecutor task.QueryExecutor, vimEnabled, createMode bool) Model {
+	m := Model{issue: issue, createMode: createMode}
 	cfg := formmodal.FormConfig{
-		Title: "Edit Issue",
-		TitleContent: func(width int) string {
-			return issuebadge.RenderBadge(m.issue)
-		},
-		// Two-column layout: metadata (left), content (right)
-		Columns: []formmodal.ColumnConfig{{}, {}},
-		// ColumnGap and MinMultiColumnWidth use defaults (3 and 100)
-		Fields: []formmodal.FieldConfig{
-			// Column 0 (left/metadata): title, priority, status, labels
-			{
-				Key:          "title",
-				Type:         formmodal.FieldTypeTextArea,
-				Label:        "Title",
-				Placeholder:  "Issue title...",
-				InitialValue: issue.TitleText,
-				MaxLength:    200,
-				MaxHeight:    3,
-				VimEnabled:   vimEnabled,
-				Column:       0,
-			},
-			{
-				Key:     "priority",
-				Type:    formmodal.FieldTypeSelect,
-				Label:   "Priority",
-				Hint:    "Space to toggle",
-				Options: priorityListOptions(issue.Priority),
-				Column:  0,
-			},
-			{
-				Key:     "status",
-				Type:    formmodal.FieldTypeSelect,
-				Label:   "Status",
-				Hint:    "Space to toggle",
-				Options: statusListOptions(issue.Status),
-				Column:  0,
-			},
-			{
-				Key:              "labels",
-				Type:             formmodal.FieldTypeEditableList,
-				Label:            "Labels",
-				Hint:             "Space to toggle",
-				Options:          labelsListOptions(issue.Labels),
-				InputLabel:       "Add Label",
-				InputHint:        "Enter to add",
-				InputPlaceholder: "Enter label name...",
-				Column:           0,
-			},
-			// Column 1 (right/content): description, notes
-			{
-				Key:          "description",
-				Type:         formmodal.FieldTypeTextArea,
-				Label:        "Description",
-				Hint:         "Ctrl+G for editor",
-				Placeholder:  "Issue description...",
-				InitialValue: issue.DescriptionText,
-				VimEnabled:   vimEnabled,
-				MaxHeight:    8,
-				Column:       1,
-			},
-			{
-				Key:          "notes",
-				Type:         formmodal.FieldTypeTextArea,
-				Label:        "Notes",
-				Hint:         "Ctrl+G for editor",
-				Placeholder:  "Issue notes...",
-				InitialValue: issue.Notes,
-				VimEnabled:   vimEnabled,
-				MaxHeight:    8,
-				Column:       1,
-			},
-		},
-		SubmitLabel: "Save",
-		MinWidth:    52,
+		Title:        m.title(),
+		TitleContent: m.titleContent(),
+		Columns:      []formmodal.ColumnConfig{{}, {}},
+		Fields:       issueFields(issue, epicSearchExecutor, vimEnabled, createMode),
+		SubmitLabel:  m.submitLabel(),
+		MinWidth:     52,
 		OnSubmit: func(values map[string]any) tea.Msg {
-			return SaveMsg{
-				IssueID:     m.issue.ID,
-				Title:       values["title"].(string),
-				Description: values["description"].(string),
-				Notes:       values["notes"].(string),
-				Priority:    parsePriority(values["priority"].(string)),
-				Status:      task.Status(values["status"].(string)),
-				Labels:      values["labels"].([]string),
-			}
+			return saveMsgFromValues(issue, values, createMode)
 		},
 		OnCancel: func() tea.Msg { return CancelMsg{} },
 	}
-
 	m.form = formmodal.New(cfg)
 	return m
+}
+
+func issueFields(issue task.Issue, epicSearchExecutor task.QueryExecutor, vimEnabled, createMode bool) []formmodal.FieldConfig {
+	fields := []formmodal.FieldConfig{
+		{
+			Key:          "title",
+			Type:         formmodal.FieldTypeTextArea,
+			Label:        "Title",
+			Placeholder:  "Issue title...",
+			InitialValue: issue.TitleText,
+			MaxLength:    200,
+			MaxHeight:    3,
+			VimEnabled:   vimEnabled,
+			Column:       0,
+		},
+	}
+
+	if createMode {
+		fields = append(fields, formmodal.FieldConfig{
+			Key:     "type",
+			Type:    formmodal.FieldTypeSelect,
+			Label:   "Type",
+			Hint:    "Space to toggle",
+			Options: issueTypeListOptions(issue.Type),
+			Column:  0,
+		})
+	}
+
+	fields = append(fields, formmodal.FieldConfig{
+		Key:     "priority",
+		Type:    formmodal.FieldTypeSelect,
+		Label:   "Priority",
+		Hint:    "Space to toggle",
+		Options: priorityListOptions(issue.Priority),
+		Column:  0,
+	})
+
+	if createMode {
+		fields = append(fields, formmodal.FieldConfig{
+			Key:                "parent_id",
+			Type:               formmodal.FieldTypeEpicSearch,
+			Label:              "Parent Epic",
+			Hint:               "Enter to search",
+			SearchPlaceholder:  "Search epics...",
+			InitialValue:       issue.ParentID,
+			EpicSearchExecutor: epicSearchExecutor,
+			DebounceMs:         200,
+			Column:             0,
+			VisibleWhen: func(values map[string]any) bool {
+				issueType, _ := values["type"].(string)
+				return issueType != string(task.TypeEpic)
+			},
+		})
+	}
+
+	fields = append(fields,
+		formmodal.FieldConfig{
+			Key:     "status",
+			Type:    formmodal.FieldTypeSelect,
+			Label:   "Status",
+			Hint:    "Space to toggle",
+			Options: statusListOptions(issue.Status),
+			Column:  0,
+		},
+		formmodal.FieldConfig{
+			Key:              "labels",
+			Type:             formmodal.FieldTypeEditableList,
+			Label:            "Labels",
+			Hint:             "Space to toggle",
+			Options:          labelsListOptions(issue.Labels),
+			InputLabel:       "Add Label",
+			InputHint:        "Enter to add",
+			InputPlaceholder: "Enter label name...",
+			Column:           0,
+		},
+		formmodal.FieldConfig{
+			Key:          "description",
+			Type:         formmodal.FieldTypeTextArea,
+			Label:        "Description",
+			Hint:         "Ctrl+G for editor",
+			Placeholder:  "Issue description...",
+			InitialValue: issue.DescriptionText,
+			VimEnabled:   vimEnabled,
+			MaxHeight:    8,
+			Column:       1,
+		},
+		formmodal.FieldConfig{
+			Key:          "notes",
+			Type:         formmodal.FieldTypeTextArea,
+			Label:        "Notes",
+			Hint:         "Ctrl+G for editor",
+			Placeholder:  "Issue notes...",
+			InitialValue: issue.Notes,
+			VimEnabled:   vimEnabled,
+			MaxHeight:    8,
+			Column:       1,
+		},
+	)
+
+	return fields
+}
+
+func saveMsgFromValues(issue task.Issue, values map[string]any, createMode bool) SaveMsg {
+	issueType := issue.Type
+	if createMode {
+		issueType = task.IssueType(values["type"].(string))
+	}
+	parentID, _ := values["parent_id"].(string)
+	if issueType == task.TypeEpic {
+		parentID = ""
+	}
+
+	return SaveMsg{
+		IssueID:     issue.ID,
+		IssueType:   issueType,
+		ParentID:    parentID,
+		Title:       values["title"].(string),
+		Description: values["description"].(string),
+		Notes:       values["notes"].(string),
+		Priority:    parsePriority(values["priority"].(string)),
+		Status:      task.Status(values["status"].(string)),
+		Labels:      append([]string(nil), values["labels"].([]string)...),
+	}
+}
+
+func issueTypeListOptions(current task.IssueType) []formmodal.ListOption {
+	if current == "" {
+		current = task.TypeTask
+	}
+
+	types := []task.IssueType{
+		task.TypeTask,
+		task.TypeBug,
+		task.TypeFeature,
+		task.TypeEpic,
+		task.TypeChore,
+		task.TypeStory,
+		task.TypeSpike,
+		task.TypeMilestone,
+	}
+
+	result := make([]formmodal.ListOption, len(types))
+	for i, issueType := range types {
+		result[i] = formmodal.ListOption{
+			Label:    string(issueType),
+			Value:    string(issueType),
+			Selected: issueType == current,
+		}
+	}
+	return result
+}
+
+func (m Model) title() string {
+	if m.createMode {
+		return "New Issue"
+	}
+	return "Edit Issue"
+}
+
+func (m Model) submitLabel() string {
+	if m.createMode {
+		return "Create"
+	}
+	return "Save"
+}
+
+func (m Model) titleContent() func(width int) string {
+	if m.createMode {
+		return nil
+	}
+	return func(width int) string {
+		return issuebadge.RenderBadge(m.issue)
+	}
+}
+
+func (m Model) IsCreateMode() bool {
+	return m.createMode
 }
 
 // priorityListOptions converts shared.PriorityOptions to formmodal.ListOption
@@ -258,7 +393,7 @@ func (m Model) View() string {
 	return m.form.View()
 }
 
-// Overlay renders the issue editor on top of a background view.
+// Overlay renders the issue editor over a background view.
 func (m Model) Overlay(background string) string {
 	return m.form.Overlay(background)
 }

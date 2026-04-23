@@ -14,6 +14,7 @@ import (
 	"github.com/zjrosen/perles/internal/task"
 	"github.com/zjrosen/perles/internal/ui/coleditor"
 	"github.com/zjrosen/perles/internal/ui/details"
+	"github.com/zjrosen/perles/internal/ui/modals/issueeditor"
 	"github.com/zjrosen/perles/internal/ui/shared/diffviewer"
 	"github.com/zjrosen/perles/internal/ui/shared/modal"
 	"github.com/zjrosen/perles/internal/ui/shared/picker"
@@ -56,7 +57,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleDeleteColumnModalKey(msg)
 	case ViewRenameViewModal:
 		return m.handleRenameViewModalKey(msg)
-	case ViewEditIssue:
+	case ViewEditIssue, ViewNewIssue:
 		return m.handleEditIssueKey(msg)
 	case ViewDeleteIssue:
 		return m.handleDeleteIssueKey(msg)
@@ -103,6 +104,16 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		// Recalculate board height since available space changed
 		m.board = m.board.SetSize(m.width, m.boardHeight())
 		return m, nil
+
+	case key.Matches(msg, keys.Kanban.NewIssue):
+		m.editingIssue = nil
+		m.creatingIssue = true
+		m.createIssueID = ""
+		m.createIssue = nil
+		m.issueEditor = issueeditor.NewForCreateWithExecutorAndVimMode(m.services.QueryExecutor, m.services.Config.UI.VimMode).
+			SetSize(m.width, m.height)
+		m.view = ViewNewIssue
+		return m, m.issueEditor.Init()
 
 	case key.Matches(msg, keys.Kanban.EditColumn):
 		// Open column editor for focused column

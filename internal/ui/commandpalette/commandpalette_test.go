@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/stretchr/testify/require"
 )
@@ -325,6 +326,14 @@ func TestCommandPalette_View_NoResults(t *testing.T) {
 
 	view := m.View()
 	require.Contains(t, view, "No matching items")
+}
+
+func TestCommandPalette_View_ClampsToViewportWidth(t *testing.T) {
+	m := New(Config{Title: "Select Workflow", Items: testItems()}).SetSize(50, 24)
+
+	view := m.View()
+
+	require.LessOrEqual(t, lipgloss.Width(view), 50)
 }
 
 func TestCommandPalette_View_Stability(t *testing.T) {

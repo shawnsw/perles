@@ -94,6 +94,7 @@ var Kanban = struct {
 	SearchFromColumn key.Binding
 	SwitchMode       key.Binding
 	ToggleStatus     key.Binding
+	NewIssue         key.Binding
 	Dashboard        key.Binding // Open multi-workflow dashboard
 	QuitConfirm      key.Binding // Ctrl+C quit with confirmation (kanban-specific)
 }{
@@ -164,6 +165,10 @@ var Kanban = struct {
 	ToggleStatus: key.NewBinding(
 		key.WithKeys("w"),
 		key.WithHelp("w", "toggle status bar"),
+	),
+	NewIssue: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "new issue"),
 	),
 	Dashboard: key.NewBinding(
 		key.WithKeys("ctrl+o"),
@@ -514,7 +519,7 @@ func ShortHelp() []key.Binding {
 func FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{Common.Up, Common.Down, Common.Left, Common.Right},
-		{Common.Enter, Kanban.Refresh, Kanban.Yank, Kanban.Status, Kanban.Priority, Kanban.AddColumn, Kanban.EditColumn, Kanban.MoveColumnLeft, Kanban.MoveColumnRight},
+		{Common.Enter, Kanban.Refresh, Kanban.Yank, Kanban.Status, Kanban.Priority, Kanban.NewIssue, Kanban.AddColumn, Kanban.EditColumn, Kanban.MoveColumnLeft, Kanban.MoveColumnRight},
 		{Kanban.NextView, Kanban.PrevView, Kanban.ViewMenu, Kanban.DeleteColumn},
 		{Common.Help, Kanban.ToggleStatus, Common.Escape, Kanban.QuitConfirm},
 	}

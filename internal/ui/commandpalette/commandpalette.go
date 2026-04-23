@@ -276,13 +276,28 @@ func (m Model) SearchText() string {
 
 // View renders the command palette box.
 func (m Model) View() string {
+	minWidth := m.config.MinWidth
+	if minWidth == 0 {
+		minWidth = 45
+	}
 	maxWidth := m.config.MaxWidth
 	if maxWidth == 0 {
 		maxWidth = 80
 	}
+	if maxWidth < minWidth {
+		maxWidth = minWidth
+	}
 
-	// Use maxWidth directly for consistent sizing
 	contentWidth := maxWidth
+	if m.viewportWidth > 0 {
+		availableWidth := max(m.viewportWidth-6, 20)
+		if contentWidth > availableWidth {
+			contentWidth = availableWidth
+		}
+	}
+	if contentWidth < minWidth {
+		contentWidth = minWidth
+	}
 
 	// Styles
 	titleStyle := lipgloss.NewStyle().
@@ -353,7 +368,7 @@ func (m Model) View() string {
 			renderedCount++
 		}
 
-		// Pad remaining slots to maintain fixed height (3 lines each: name, desc, spacing)
+		// Pad remaining slots to keep the list area stable without adding extra vertical gaps
 		for i := renderedCount; i < maxVisible; i++ {
 			content.WriteString("\n")
 			content.WriteString(emptyLine)

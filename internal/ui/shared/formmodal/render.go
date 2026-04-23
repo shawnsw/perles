@@ -50,6 +50,13 @@ func (m *Model) View() string {
 	if width == 0 {
 		width = 50
 	}
+	maxWidth := 0
+	if m.width > 0 {
+		maxWidth = max(m.width-6, 20)
+		if width > maxWidth {
+			width = maxWidth
+		}
+	}
 
 	// For multi-column layouts, use a larger width based on available space
 	if m.useMultiColumnLayout() {
@@ -64,6 +71,9 @@ func (m *Model) View() string {
 		maxModalWidth := 140
 		if modalWidth > maxModalWidth {
 			modalWidth = maxModalWidth
+		}
+		if maxWidth > 0 && modalWidth > maxWidth {
+			modalWidth = maxWidth
 		}
 		if modalWidth > width {
 			width = modalWidth

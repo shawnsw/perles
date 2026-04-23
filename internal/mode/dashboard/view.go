@@ -330,31 +330,51 @@ func (m Model) renderView() string {
 
 	// Check if coordinator panel is visible
 	if m.showCoordinatorPanel && m.coordinatorPanel != nil {
-		// Split layout: workflow table on left, coordinator panel on right
-		panelWidth := CoordinatorPanelWidth
-		tableWidth := m.width - panelWidth
+		stackCoordinator := m.width < CoordinatorPanelWidth+40
+		if stackCoordinator {
+			tableView := m.renderBorderedWorkflowTable(m.width, tableHeight)
+			panelHeight := contentHeight - tableHeight - epicSectionHeight
+			if panelHeight < 8 {
+				panelHeight = 8
+			}
+			m.coordinatorPanel.SetSize(m.width, panelHeight)
+			m.coordinatorPanel.SetScreenXOffset(0)
+			m.coordinatorPanel.SetScreenYOffset(headerHeight + tableHeight + epicSectionHeight)
+			panelView := m.coordinatorPanel.View()
 
-		// Render workflow table (narrower)
-		tableView := m.renderBorderedWorkflowTable(tableWidth, tableHeight)
-
-		// Render coordinator panel - it spans the full content height
-		// Set screen offsets for mouse coordinate mapping
-		m.coordinatorPanel.SetSize(panelWidth, contentHeight)
-		m.coordinatorPanel.SetScreenXOffset(tableWidth)
-		m.coordinatorPanel.SetScreenYOffset(headerHeight)
-		panelView := m.coordinatorPanel.View()
-
-		// Build left column: table + epic section
-		var leftColumn string
-		if epicSectionHeight > 0 {
-			epicSection := m.renderEpicSection(tableWidth, epicSectionHeight)
-			leftColumn = lipgloss.JoinVertical(lipgloss.Left, tableView, epicSection)
+			sections := []string{tableView}
+			if epicSectionHeight > 0 {
+				sections = append(sections, m.renderEpicSection(m.width, epicSectionHeight))
+			}
+			sections = append(sections, panelView)
+			mainContent = lipgloss.JoinVertical(lipgloss.Left, sections...)
 		} else {
-			leftColumn = tableView
-		}
+			// Split layout: workflow table on left, coordinator panel on right
+			panelWidth := CoordinatorPanelWidth
+			tableWidth := m.width - panelWidth
 
-		// Join horizontally
-		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, panelView)
+			// Render workflow table (narrower)
+			tableView := m.renderBorderedWorkflowTable(tableWidth, tableHeight)
+
+			// Render coordinator panel - it spans the full content height
+			// Set screen offsets for mouse coordinate mapping
+			m.coordinatorPanel.SetSize(panelWidth, contentHeight)
+			m.coordinatorPanel.SetScreenXOffset(tableWidth)
+			m.coordinatorPanel.SetScreenYOffset(headerHeight)
+			panelView := m.coordinatorPanel.View()
+
+			// Build left column: table + epic section
+			var leftColumn string
+			if epicSectionHeight > 0 {
+				epicSection := m.renderEpicSection(tableWidth, epicSectionHeight)
+				leftColumn = lipgloss.JoinVertical(lipgloss.Left, tableView, epicSection)
+			} else {
+				leftColumn = tableView
+			}
+
+			// Join horizontally
+			mainContent = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, panelView)
+		}
 	} else {
 		// Full width workflow table
 		tableView := m.renderBorderedWorkflowTable(m.width, tableHeight)

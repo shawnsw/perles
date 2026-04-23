@@ -245,6 +245,7 @@ func (m Model) renderKanbanContent() string {
 	actionsCol.WriteString(renderBinding(keys.Kanban.Enter))
 	actionsCol.WriteString(renderBinding(keys.Kanban.Refresh))
 	actionsCol.WriteString(renderBinding(keys.Kanban.Yank))
+	actionsCol.WriteString(renderBinding(keys.Kanban.NewIssue))
 	actionsCol.WriteString(renderBinding(keys.Kanban.AddColumn))
 	actionsCol.WriteString(renderBinding(keys.Kanban.EditColumn))
 	actionsCol.WriteString(renderBinding(keys.Kanban.DeleteColumn))

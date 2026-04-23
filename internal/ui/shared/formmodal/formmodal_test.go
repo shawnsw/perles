@@ -5337,6 +5337,29 @@ func TestMultiColumn_OnePixelAboveThreshold(t *testing.T) {
 	require.True(t, m.useMultiColumnLayout(), "should use multi-column at width == 101")
 }
 
+func TestMultiColumn_NarrowViewportDoesNotOverflow(t *testing.T) {
+	cfg := FormConfig{
+		Title: "Multi-Column Form",
+		Fields: []FieldConfig{
+			{Key: "left1", Type: FieldTypeText, Label: "Left Field 1", Column: 0},
+			{Key: "right1", Type: FieldTypeText, Label: "Right Field 1", Column: 1},
+		},
+		Columns:             []ColumnConfig{{}, {}},
+		MinMultiColumnWidth: 60,
+		MinWidth:            50,
+	}
+	m := New(cfg).SetSize(60, 24)
+
+	require.True(t, m.useMultiColumnLayout(), "regression setup should stay in multi-column mode")
+
+	view := m.View()
+	zonePattern := regexp.MustCompile(`\x1b\[\d+z`)
+	view = zonePattern.ReplaceAllString(view, "")
+	for _, line := range strings.Split(strings.TrimSuffix(view, "\n"), "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), 60, "rendered line should stay within the viewport")
+	}
+}
+
 func TestMultiColumn_FieldGrouping(t *testing.T) {
 	// Verify that fields are correctly grouped by Column value
 	cfg := FormConfig{

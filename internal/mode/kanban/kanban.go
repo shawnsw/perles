@@ -3,6 +3,7 @@ package kanban
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -40,6 +41,7 @@ const (
 	ViewRenameViewModal
 	ViewEditIssue   // Unified issue editor modal
 	ViewDeleteIssue // Delete issue confirmation modal
+	ViewNewIssue    // Create issue modal
 )
 
 // cursorState tracks the current selection for restoration after refresh.
@@ -71,7 +73,10 @@ type Model struct {
 	selectedIssue       *task.Issue // Issue being deleted
 
 	// Edit operation state
-	editingIssue *task.Issue // Issue being edited (for title/description comparison on save)
+	editingIssue  *task.Issue // Issue being edited (for title/description comparison on save)
+	creatingIssue bool
+	createIssueID string
+	createIssue   *task.Issue
 
 	// Pending cursor restoration after refresh
 	pendingCursor    *cursorState
@@ -206,7 +211,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.board, cmd = m.board.Update(msg)
 			return m, cmd
-		case ViewEditIssue:
+		case ViewEditIssue, ViewNewIssue:
 			var cmd tea.Cmd
 			m.issueEditor, cmd = m.issueEditor.Update(msg)
 			return m, cmd
@@ -233,6 +238,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case OpenEditMenuMsg:
 		issue := msg.Issue
 		m.editingIssue = &issue // Store for title/description comparison on save
+		m.creatingIssue = false
+		m.createIssueID = ""
+		m.createIssue = nil
 		m.issueEditor = issueeditor.NewWithVimMode(msg.Issue, m.services.Config.UI.VimMode).
 			SetSize(m.width, m.height)
 		m.view = ViewEditIssue
@@ -241,6 +249,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case issueeditor.SaveMsg:
 		m.view = ViewBoard
 		m.loading = true
+		if m.creatingIssue {
+			return m, m.createIssueCmd(msg)
+		}
 		opts := msg.BuildUpdateOptions(m.editingIssue)
 		m.editingIssue = nil
 		return m, m.saveIssueCmd(msg.IssueID, opts)
@@ -248,7 +259,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case issueeditor.CancelMsg:
 		m.view = ViewBoard
 		m.editingIssue = nil // Clear on cancel too
+		m.creatingIssue = false
+		m.createIssueID = ""
+		m.createIssue = nil
 		return m, nil
+
+	case issueCreatedMsg:
+		return m.handleIssueCreated(msg)
 
 	case details.DeleteIssueMsg:
 		return m.openDeleteConfirm(msg)
@@ -385,7 +402,7 @@ func (m Model) View() string {
 		// Render modal overlay on top of board
 		bg := m.renderBoardWithStatusBar()
 		return m.modal.Overlay(bg)
-	case ViewEditIssue:
+	case ViewEditIssue, ViewNewIssue:
 		// Render issue editor overlay on top of board
 		bg := m.renderBoardWithStatusBar()
 		return m.issueEditor.Overlay(bg)
@@ -555,16 +572,46 @@ func (m Model) ShowStatusBar() bool {
 }
 
 func (m Model) renderStatusBar() string {
-	// Build left section with view indicator (if multiple views)
-	var content string
-	if m.board.ViewCount() > 1 {
-		viewName := m.board.CurrentViewName()
-		viewNum := m.board.CurrentViewIndex() + 1
-		viewTotal := m.board.ViewCount()
-		content = fmt.Sprintf("[%s] (%d/%d)", viewName, viewNum, viewTotal)
+	parts := []string{}
+	viewName := m.board.CurrentViewName()
+	if viewName != "" {
+		if m.board.ViewCount() > 1 {
+			parts = append(parts, fmt.Sprintf("%s (%d/%d)", viewName, m.board.CurrentViewIndex()+1, m.board.ViewCount()))
+		} else {
+			parts = append(parts, viewName)
+		}
+	}
+	if m.board.ColCount() > 0 {
+		parts = append(parts, fmt.Sprintf("%d columns", m.board.ColCount()))
+	}
+	parts = append(parts, fmt.Sprintf("%d issues", m.loadedIssueCount()))
+	if focused := m.focusedColumnName(); focused != "" {
+		parts = append(parts, "focus "+focused)
+	}
+	if selected := m.board.SelectedIssue(); selected != nil {
+		parts = append(parts, selected.ID)
 	}
 
-	return styles.StatusBarStyle.Width(m.width).Render(content)
+	return styles.StatusBarStyle.Width(m.width).Render(strings.Join(parts, " • "))
+}
+
+func (m Model) loadedIssueCount() int {
+	total := 0
+	for i := 0; i < m.board.ColCount(); i++ {
+		if col, ok := m.board.BoardColumn(i).(board.Column); ok {
+			total += len(col.Items())
+		}
+	}
+	return total
+}
+
+func (m Model) focusedColumnName() string {
+	idx := m.board.FocusedColumn()
+	columns := m.currentViewColumns()
+	if idx < 0 || idx >= len(columns) {
+		return ""
+	}
+	return columns[idx].Name
 }
 
 func (m Model) renderErrorBar() string {
@@ -747,9 +794,22 @@ type RequestRefreshMsg struct{}
 // still include the deleted issue.
 type PostDeleteRefreshMsg struct{}
 
+// PostCreateRefreshMsg requests the app flush caches and reload after an issue
+// creation so BQL-backed views include the new issue immediately.
+type PostCreateRefreshMsg struct {
+	Issue task.Issue
+}
+
 // OpenEditMenuMsg requests opening the issue editor modal.
 type OpenEditMenuMsg struct {
 	Issue task.Issue
+}
+
+// issueCreatedMsg signals completion of a create-issue flow.
+type issueCreatedMsg struct {
+	issue   task.Issue
+	issueID string
+	err     error
 }
 
 type errMsg struct {
@@ -787,6 +847,80 @@ func (m Model) saveIssueCmd(issueID string, opts task.UpdateOptions) tea.Cmd {
 		err := m.services.TaskExecutor.UpdateIssue(issueID, opts)
 		return issueSavedMsg{issueID: issueID, opts: opts, err: err}
 	}
+}
+
+func (m Model) createIssueCmd(msg issueeditor.SaveMsg) tea.Cmd {
+	return func() tea.Msg {
+		created := task.Issue{
+			ID:              msg.IssueID,
+			Type:            msg.IssueType,
+			ParentID:        msg.ParentID,
+			TitleText:       msg.Title,
+			DescriptionText: msg.Description,
+			Notes:           msg.Notes,
+			Priority:        msg.Priority,
+			Status:          msg.Status,
+			Labels:          append([]string(nil), msg.Labels...),
+		}
+
+		var (
+			result task.CreateResult
+			err    error
+		)
+		if msg.IssueType == task.TypeEpic {
+			result, err = m.services.TaskExecutor.CreateEpic(msg.Title, msg.Description, msg.Labels)
+		} else {
+			result, err = m.services.TaskExecutor.CreateTask(msg.Title, msg.Description, msg.ParentID, "", msg.Labels)
+		}
+		if err != nil {
+			return issueCreatedMsg{issue: created, err: err}
+		}
+
+		created.ID = result.ID
+		created.TitleText = result.Title
+		updateOpts := msg.BuildUpdateOptions(nil)
+		if msg.IssueType != task.TypeEpic && msg.IssueType != task.TypeTask {
+			issueType := msg.IssueType
+			updateOpts.Type = &issueType
+		}
+		if created.Notes != "" || updateOpts.Priority != nil || updateOpts.Status != nil || updateOpts.Type != nil {
+			if err := m.services.TaskExecutor.UpdateIssue(result.ID, updateOpts); err != nil {
+				return issueCreatedMsg{issue: created, issueID: result.ID, err: err}
+			}
+		}
+
+		return issueCreatedMsg{issue: created, issueID: result.ID}
+	}
+}
+
+func (m Model) handleIssueCreated(msg issueCreatedMsg) (Model, tea.Cmd) {
+	m.creatingIssue = false
+	m.createIssueID = ""
+	m.createIssue = nil
+	if msg.err != nil {
+		return m, func() tea.Msg {
+			return mode.ShowToastMsg{Message: "Create failed: " + msg.err.Error(), Style: toaster.StyleError}
+		}
+	}
+
+	m.createIssueID = msg.issueID
+	m.createIssue = &msg.issue
+	return m, func() tea.Msg { return PostCreateRefreshMsg{Issue: msg.issue} }
+}
+
+// HandlePostCreateRefresh processes a board reload after an issue creation.
+// Called by app.go after flushing BQL/dep-graph caches so newly created issues
+// appear in cached views immediately.
+func (m Model) HandlePostCreateRefresh(issue task.Issue) (Model, tea.Cmd) {
+	m.pendingCursor = &cursorState{issueID: issue.ID}
+	m.startReloadCycle()
+	m.board = m.board.InvalidateViews()
+	m.createIssueID = ""
+	m.createIssue = nil
+	return m, tea.Batch(
+		m.board.LoadAllColumns(),
+		func() tea.Msg { return mode.ShowToastMsg{Message: "Issue created", Style: toaster.StyleSuccess} },
+	)
 }
 
 func scheduleErrorClear() tea.Cmd {

@@ -9,6 +9,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/zjrosen/perles/internal/task"
+	"github.com/zjrosen/perles/internal/ui/shared/formmodal"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
@@ -249,6 +250,62 @@ func testIssueWithNotes(id, title, description, notes string, labels []string, p
 		Priority:        priority,
 		Status:          status,
 	}
+}
+
+func findFieldConfig(fields []formmodal.FieldConfig, key string) (formmodal.FieldConfig, bool) {
+	for _, field := range fields {
+		if field.Key == key {
+			return field, true
+		}
+	}
+	return formmodal.FieldConfig{}, false
+}
+
+func TestIssueFields_CreateMode_ParentEpicVisibilityFollowsType(t *testing.T) {
+	fields := issueFields(task.Issue{Type: task.TypeTask}, nil, false, true)
+	parentField, ok := findFieldConfig(fields, "parent_id")
+	require.True(t, ok, "create mode should include parent epic field")
+	require.NotNil(t, parentField.VisibleWhen, "parent epic field should hide for epic issue types")
+	require.True(t, parentField.VisibleWhen(map[string]any{"type": string(task.TypeTask)}))
+	require.False(t, parentField.VisibleWhen(map[string]any{"type": string(task.TypeEpic)}))
+}
+
+func TestIssueFields_EditMode_DoesNotIncludeParentEpic(t *testing.T) {
+	fields := issueFields(task.Issue{Type: task.TypeTask}, nil, false, false)
+	_, ok := findFieldConfig(fields, "parent_id")
+	require.False(t, ok, "edit mode should not include create-only parent epic field")
+}
+
+func TestSaveMsgFromValues_CreateMode_ParentIDHandling(t *testing.T) {
+	baseValues := map[string]any{
+		"title":       "New issue",
+		"description": "Desc",
+		"notes":       "Notes",
+		"priority":    "P2",
+		"status":      string(task.StatusOpen),
+		"labels":      []string{"bug"},
+	}
+
+	taskValues := map[string]any{
+		"type":      string(task.TypeBug),
+		"parent_id": "epic-123",
+	}
+	for k, v := range baseValues {
+		taskValues[k] = v
+	}
+
+	msg := saveMsgFromValues(task.Issue{}, taskValues, true)
+	require.Equal(t, "epic-123", msg.ParentID, "non-epic creates should preserve the selected parent epic")
+
+	epicValues := map[string]any{
+		"type": string(task.TypeEpic),
+	}
+	for k, v := range baseValues {
+		epicValues[k] = v
+	}
+
+	msg = saveMsgFromValues(task.Issue{}, epicValues, true)
+	require.Empty(t, msg.ParentID, "epic creates should clear any parent link")
 }
 
 func TestNew_InitializesFormModalWithCorrectFields(t *testing.T) {

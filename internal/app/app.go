@@ -472,6 +472,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.kanban, cmd = m.kanban.HandlePostDeleteRefresh()
 		return m, cmd
 
+	case kanban.PostCreateRefreshMsg:
+		m.flushQueryCaches("post-create kanban")
+		var cmd tea.Cmd
+		m.kanban, cmd = m.kanban.HandlePostCreateRefresh(msg.Issue)
+		return m, cmd
+
 	case search.ExitToKanbanMsg:
 		// Switch back to kanban mode from search
 		log.Info(log.CatMode, "Switching mode", "from", "search", "to", "kanban")

@@ -325,6 +325,111 @@ func TestKanban_HelpView_CtrlC_ReturnsRequestQuitMsg(t *testing.T) {
 // Ctrl+E Issue Editor from Board View Tests
 // =============================================================================
 
+func TestKanban_NewIssueKey_OpensCreateEditor(t *testing.T) {
+	m := createTestModelWithIssue("test-123", "status = open")
+
+	m, cmd := m.handleBoardKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	require.Equal(t, ViewNewIssue, m.view)
+	require.True(t, m.creatingIssue)
+	require.Nil(t, m.editingIssue)
+	require.Nil(t, cmd)
+}
+
+func TestKanban_CreateIssueCmd_TaskWithCustomType_UpdatesTypeAndFields(t *testing.T) {
+	m := createTestModel(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().CreateTask("New bug", "Desc", "", "", []string{"bug"}).Return(task.CreateResult{ID: "new-1", Title: "New bug"}, nil)
+	mockExecutor.EXPECT().UpdateIssue("new-1", mock.MatchedBy(func(opts task.UpdateOptions) bool {
+		return opts.Type != nil && *opts.Type == task.TypeBug &&
+			opts.Priority != nil && *opts.Priority == task.PriorityHigh &&
+			opts.Status != nil && *opts.Status == task.StatusInProgress &&
+			opts.Notes != nil && *opts.Notes == "Notes"
+	})).Return(nil)
+	m.services.TaskExecutor = mockExecutor
+
+	cmd := m.createIssueCmd(issueeditor.SaveMsg{
+		IssueType:   task.TypeBug,
+		Title:       "New bug",
+		Description: "Desc",
+		Notes:       "Notes",
+		Priority:    task.PriorityHigh,
+		Status:      task.StatusInProgress,
+		Labels:      []string{"bug"},
+	})
+
+	result := cmd()
+	createdMsg, ok := result.(issueCreatedMsg)
+	require.True(t, ok)
+	require.NoError(t, createdMsg.err)
+	require.Equal(t, "new-1", createdMsg.issueID)
+	require.Equal(t, task.TypeBug, createdMsg.issue.Type)
+}
+
+func TestKanban_CreateIssueCmd_TaskWithParentEpic_PassesParentIDToCreateTask(t *testing.T) {
+	m := createTestModel(t)
+	mockExecutor := mocks.NewMockTaskExecutor(t)
+	mockExecutor.EXPECT().CreateTask("Child task", "Desc", "epic-123", "", []string{"bug"}).Return(task.CreateResult{ID: "new-2", Title: "Child task"}, nil)
+	mockExecutor.EXPECT().UpdateIssue("new-2", mock.MatchedBy(func(opts task.UpdateOptions) bool {
+		return opts.Type != nil && *opts.Type == task.TypeBug
+	})).Return(nil)
+	m.services.TaskExecutor = mockExecutor
+
+	cmd := m.createIssueCmd(issueeditor.SaveMsg{
+		IssueType:   task.TypeBug,
+		ParentID:    "epic-123",
+		Title:       "Child task",
+		Description: "Desc",
+		Priority:    task.PriorityMedium,
+		Status:      task.StatusOpen,
+		Labels:      []string{"bug"},
+	})
+
+	result := cmd()
+	createdMsg, ok := result.(issueCreatedMsg)
+	require.True(t, ok)
+	require.NoError(t, createdMsg.err)
+	require.Equal(t, "new-2", createdMsg.issueID)
+	require.Equal(t, "epic-123", createdMsg.issue.ParentID)
+}
+
+func TestKanban_HandleIssueCreated_SuccessReturnsPostCreateRefresh(t *testing.T) {
+	m := createTestModel(t)
+	m.creatingIssue = true
+	created := task.Issue{ID: "new-1", TitleText: "New issue", Type: task.TypeTask}
+
+	m, cmd := m.handleIssueCreated(issueCreatedMsg{issue: created, issueID: "new-1"})
+
+	require.False(t, m.creatingIssue)
+	require.NotNil(t, cmd)
+	result := cmd()
+	refreshMsg, ok := result.(PostCreateRefreshMsg)
+	require.True(t, ok)
+	require.Equal(t, "new-1", refreshMsg.Issue.ID)
+}
+
+func TestKanban_HandlePostCreateRefresh_SetsPendingCursor(t *testing.T) {
+	m := createTestModelWithIssue("existing-1", "status = open")
+	issue := task.Issue{ID: "new-2", TitleText: "New issue", Type: task.TypeTask}
+
+	m, cmd := m.HandlePostCreateRefresh(issue)
+
+	require.NotNil(t, m.pendingCursor)
+	require.Equal(t, "new-2", m.pendingCursor.issueID)
+	require.NotNil(t, cmd)
+}
+
+func TestKanban_RenderStatusBar_ShowsStatsForSingleView(t *testing.T) {
+	m := createTestModelWithIssue("test-123", "status = open")
+
+	status := m.renderStatusBar()
+
+	require.Contains(t, status, "Test")
+	require.Contains(t, status, "1 columns")
+	require.Contains(t, status, "1 issues")
+	require.Contains(t, status, "test-123")
+}
+
 func TestKanban_CtrlE_BoardView_EmitsOpenEditMenuMsg(t *testing.T) {
 	m := createTestModelWithIssue("test-123", "status = open")
 
